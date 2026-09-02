@@ -8,7 +8,7 @@
 // Writes are debounced so hot paths (play-count bumps during normal listening)
 // don't hit disk per event.
 
-import { api, fetchSongDetails } from '../api.js';
+import { api, fetchSongDetailsFull } from '../api.js';
 import { store } from '../store.js';
 import { onEnded } from '../player.js';
 
@@ -210,8 +210,12 @@ async function fetchLikedPlaylist() {
   const trackIds = (detail?.playlist?.trackIds || []).map((r) => ({ id: r.id, at: r.at || 0 }));
   if (!trackIds.length) return { tracks: [], likedPlaylistId };
 
-  const songs = await fetchSongDetails(trackIds.map((r) => r.id));
+  const { songs, privileges } = await fetchSongDetailsFull(trackIds.map((r) => r.id));
   const addedByIdMap = new Map(trackIds.map((r) => [r.id, r.at]));
+  // st < 0 → NetEase has pulled the track (暂无版权 etc.). Kept in the library
+  // so 红心 stays a faithful mirror, but flagged so modes don't queue it —
+  // otherwise the player burns ~2.5s per dead track discovering url=null.
+  const unavailableIds = new Set(privileges.filter((p) => typeof p?.st === 'number' && p.st < 0).map((p) => p.id));
 
   const tracks = songs.map((s) => ({
     id: s.id,
@@ -222,6 +226,7 @@ async function fetchLikedPlaylist() {
     addedAt: addedByIdMap.get(s.id) || Date.now(),
     lastPlayedAt: 0,
     playCount: 0,
+    unavailable: unavailableIds.has(s.id),
   }));
   return { tracks, likedPlaylistId };
 }

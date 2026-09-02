@@ -116,12 +116,22 @@ async function apiOnce(path, params, { timeout = DEFAULT_TIMEOUT_MS, signal } = 
 // Common batched fetch — /song/detail caps at ~1000 ids per call but smaller
 // chunks behave better and stream progress via the optional onProgress.
 export async function fetchSongDetails(ids, onProgress, opts) {
-  const out = [];
+  return (await fetchSongDetailsFull(ids, onProgress, opts)).songs;
+}
+
+// Same call, but also returns the parallel `privileges` array. `privileges[i].st`
+// is NetEase's availability flag: < 0 means the track has been pulled (no
+// license in this region, delisted, ...) and /song/url/v1 will answer with
+// url=null for it — worth knowing before we try to play it.
+export async function fetchSongDetailsFull(ids, onProgress, opts) {
+  const songs = [];
+  const privileges = [];
   for (let i = 0; i < ids.length; i += 200) {
     const chunk = ids.slice(i, i + 200);
     const d = await api('/song/detail', { ids: chunk.join(',') }, opts);
-    out.push(...(d.songs || []));
+    songs.push(...(d.songs || []));
+    privileges.push(...(d.privileges || []));
     onProgress?.(Math.min(i + 200, ids.length), ids.length);
   }
-  return out;
+  return { songs, privileges };
 }

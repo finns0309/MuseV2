@@ -68,7 +68,7 @@ export async function buildModeQueue(modeId, { seedTrack = null, prepend = [] } 
     : state.player;
 
   const result = await mode.build({
-    library: state.library,
+    library: playableLibrary(state.library),
     player,
     now: Date.now(),
   });
@@ -123,6 +123,15 @@ export async function extendQueueForCurrentSession({ limit = DEFAULT_EXTEND_LIMI
 export function shouldLoopQueueAtEnd() {
   const session = store.get().playbackSession;
   return session?.kind === 'playlist';
+}
+
+// Modes get a view of the library without tracks NetEase has pulled
+// (`unavailable`, see library.js). The full list stays in the store for cmdk /
+// heart state; only queue-building is filtered.
+function playableLibrary(library) {
+  const tracks = library?.tracks || [];
+  const playable = tracks.filter((t) => !t.unavailable);
+  return playable.length === tracks.length ? library : { ...library, tracks: playable };
 }
 
 function dedupeById(tracks) {

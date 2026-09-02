@@ -33,7 +33,10 @@ export async function playTrack(track, queue = null, queueIdx = -1) {
   maybeScrobble();
   resetScrobble(track);
 
-  store.set((s) => ({ ...s, player: { ...s.player, track, queue: q, queueIdx: idx } }));
+  // Reset position/duration with the new track. Play tracking (library.js)
+  // watches currentTime ≥ 30s; leaving the previous track's value in place
+  // made a quick skip look like an instant 30s listen and logged phantom plays.
+  store.set((s) => ({ ...s, player: { ...s.player, track, queue: q, queueIdx: idx, currentTime: 0, duration: track.dt ? track.dt / 1000 : 0 } }));
 
   let url;
   try {
@@ -58,11 +61,83 @@ export async function playTrack(track, queue = null, queueIdx = -1) {
   }
 
   audio.src = url;
+  loadedTrackId = track.id;
+  urlIssuedAt = Date.now();
   // Push meta now — lyrics can show the title immediately instead of waiting
   // for the first timeupdate after audio actually starts.
   pushPlayerState();
   try { await audio.play(); }
   catch (e) { console.warn('audio.play()', e); }
+}
+
+// ---- Resume after idle ------------------------------------------------------
+// NetEase media URLs expire (expi ≈ 1200s → HTTP 403 afterwards). Chromium
+// only buffers part of the file, so resuming a track that sat paused for
+// >20 min issues a Range request against a dead URL: play() rejects or the
+// element throws MEDIA_ERR_NETWORK and ⌘P looks like it does nothing. We
+// track when the URL was issued and re-fetch it (keeping the position)
+// before resuming — and do the same once if the element already errored.
+
+const URL_TTL_MS = 15 * 60 * 1000;   // refresh well before the 20-min expiry
+let urlIssuedAt = 0;
+// Which track the <audio> element is actually loaded with. During a switch the
+// store already points at the new track while the URL is still being fetched
+// and the OLD track keeps playing — its timeupdate/loadedmetadata events must
+// not be attributed to the new one (play tracking watches store.currentTime).
+let loadedTrackId = null;
+let reloading = null;                // in-flight reload promise (dedupe)
+
+function urlStale() {
+  return !!audio.error || (urlIssuedAt > 0 && Date.now() - urlIssuedAt > URL_TTL_MS);
+}
+
+// Re-fetch the current track's URL and restore playback position. Resolves
+// true on success. Safe to call concurrently — callers share one attempt.
+async function reloadCurrent({ autoplay }) {
+  if (reloading) return reloading;
+  reloading = (async () => {
+    const track = store.get().player.track;
+    if (!track) return false;
+    commitSegment();
+    const pos = audio.currentTime || 0;
+    let url;
+    try {
+      const r = await api('/song/url/v1', { id: track.id, level: 'standard' },
+        { timeout: 5_000, retry: { attempts: 2, baseDelayMs: 250 } });
+      url = r?.data?.[0]?.url;
+    } catch (e) {
+      console.warn('[player] reload url failed', e?.message || e);
+      return false;
+    }
+    if (!url || store.get().player.track?.id !== track.id) return false;
+    const ready = new Promise((resolve) => {
+      audio.addEventListener('loadedmetadata', resolve, { once: true });
+      audio.addEventListener('error', resolve, { once: true });
+    });
+    audio.src = url;
+    loadedTrackId = track.id;
+    urlIssuedAt = Date.now();
+    await ready;
+    if (audio.error) return false;
+    if (pos > 0 && pos < (audio.duration || Infinity)) audio.currentTime = pos;
+    console.info('[player] reloaded url', track.name, `at ${Math.round(pos)}s`);
+    if (autoplay) { try { await audio.play(); } catch (e) { console.warn('audio.play() after reload', e); return false; } }
+    return true;
+  })().finally(() => { reloading = null; });
+  return reloading;
+}
+
+async function resume() {
+  if (!store.get().player.track) return;
+  if (urlStale()) { await reloadCurrent({ autoplay: true }); return; }
+  try { await audio.play(); }
+  catch (e) {
+    // AbortError = a newer load interrupted us; anything else (network,
+    // decode) is worth one reload before giving up.
+    if (e?.name === 'AbortError') return;
+    console.warn('[player] play() failed, reloading', e?.message || e);
+    await reloadCurrent({ autoplay: true });
+  }
 }
 
 // Replace the queue and start playing. Used by radio modes on activation.
@@ -101,9 +176,9 @@ export function setLoop(single) {
 }
 export function setQueueLoop(flag) { queueLoop = !!flag; }
 
-export function toggle() { if (audio.paused) audio.play().catch(() => {}); else audio.pause(); }
+export function toggle() { if (audio.paused) resume(); else audio.pause(); }
 export function pause()  { audio.pause(); }
-export function play()   { audio.play().catch(() => {}); }
+export function play()   { resume(); }
 
 export function seek(t) {
   const dur = audio.duration;
@@ -264,13 +339,29 @@ audio.addEventListener('ended', () => {
   }
   next();
 });
+// Guard for element events: drop them while the element still holds the
+// previous track (see loadedTrackId).
+function elementIsCurrent() {
+  return store.get().player.track?.id === loadedTrackId;
+}
+
 audio.addEventListener('loadedmetadata', () => {
+  if (!elementIsCurrent()) return;
   patch({ duration: audio.duration || 0 });
   pushPlayerState();
 });
 audio.addEventListener('error', () => {
+  const wasPlaying = store.get().player.playing;
   patch({ playing: false });
   console.warn('[player] audio error', audio.error?.code, audio.error?.message);
+  // Mid-playback network failure (typically the URL expiring under a long
+  // track, or a dropped connection): re-fetch once and pick up where we were.
+  // Only when we were actually playing — a stale paused element gets fixed
+  // lazily by resume() so we don't hammer NCM for tracks nobody asked for.
+  const code = audio.error?.code;
+  if (wasPlaying && !reloading && (code === MediaError.MEDIA_ERR_NETWORK || code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED)) {
+    reloadCurrent({ autoplay: true }).catch(() => {});
+  }
 });
 
 // timeupdate fires ~4Hz while playing, never while paused — perfect single
@@ -278,6 +369,7 @@ audio.addEventListener('error', () => {
 // keeps us at 4Hz even if the browser speeds up.
 let lastPushed = 0;
 audio.addEventListener('timeupdate', () => {
+  if (!elementIsCurrent()) return;
   const now = performance.now();
   if (now - lastPushed < 240) return;
   lastPushed = now;
