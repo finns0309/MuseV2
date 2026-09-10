@@ -255,8 +255,11 @@ ipcMain.handle('resize-window', (_, w, h) => {
 // color at/through it (the "grey/black flash" on summon in light mode).
 function themeBg() {
   try {
-    const scheme = store?.get('ui-prefs')?.appearance?.scheme;
-    return scheme === 'light' ? '#f5f5f7' : '#1c1c1e';
+    const a = store?.get('ui-prefs')?.appearance || {};
+    // The renderer persists the resolved panel bg (theme × scheme); fall back
+    // to the default theme's colours for a first launch / stale prefs.
+    if (/^#[0-9a-f]{6}$/i.test(a.bg || '')) return a.bg;
+    return a.scheme === 'light' ? '#f5f5f7' : '#1c1c1e';
   } catch { return '#1c1c1e'; }
 }
 
@@ -282,6 +285,12 @@ function createWindow() {
   // app.isQuitting (tray "Quit" / ⌘Q).
   win.on('close', (e) => {
     if (!app.isQuitting) { e.preventDefault(); win.hide(); }
+  });
+
+  // A summon surface gets out of the way the moment you look elsewhere —
+  // clicking another app is the same gesture as Esc.
+  win.on('blur', () => {
+    if (!app.isQuitting && win.isVisible() && !win.webContents.isDevToolsFocused()) win.hide();
   });
 }
 

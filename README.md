@@ -44,7 +44,8 @@ Everything happens in the palette. Type to search; prefix with `/` for commands.
 | `/pl <id or url>` | load a NetEase playlist and remember it |
 | `/mode`, `/daily`, `/discover`, … | switch listening mode |
 | `/light` `/dark` | appearance |
-| `/accent #d8b35f` | override the accent color |
+| `/theme` `/theme <muse\|paper\|mono>` | list / switch the material (type, radius, shadows) |
+| `/accent #d8b35f` / `/accent auto` | pin the accent color / follow the album cover again |
 
 | Key | Action |
 |-----|--------|

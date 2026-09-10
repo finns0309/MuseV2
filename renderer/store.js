@@ -92,11 +92,13 @@ export const store = new Store({
   // Command palette open state.
   cmdkOpen: false,
 
-  // Quiet command-surface appearance. Accent is intentionally a plain hex
-  // value so it can be changed from cmdk with `/accent #d8b35f`.
+  // Quiet command-surface appearance. Accent is null (auto: derived from the
+  // album cover, see accent.js) or a plain hex pinned via `/accent #d8b35f`.
   appearance: {
     scheme: 'dark',                 // 'dark' | 'light'
-    accent: '#6eb5ff',
+    theme: 'muse',                  // see ./themes.js
+    accent: null,
+    bg: null,                       // resolved panel bg (#rrggbb) — mirrored to the native window
   },
 });
 
@@ -121,9 +123,16 @@ export const actions = {
     store.set((s) => ({ ...s, appearance: { ...s.appearance, scheme } }));
   },
 
+  setTheme(theme) {
+    if (typeof theme !== 'string' || !theme) throw new TypeError('setTheme: id must be non-empty string');
+    if (store.get().appearance.theme === theme) return;
+    store.set((s) => ({ ...s, appearance: { ...s.appearance, theme } }));
+  },
+
+  // null = auto (follow the album cover). A hex value pins the accent.
   setAccent(accent) {
-    if (!/^#[0-9a-f]{6}$/i.test(accent)) throw new TypeError('setAccent: expected #rrggbb');
-    const normalized = accent.toLowerCase();
+    if (accent != null && !/^#[0-9a-f]{6}$/i.test(accent)) throw new TypeError('setAccent: expected #rrggbb or null');
+    const normalized = accent == null ? null : accent.toLowerCase();
     if (store.get().appearance.accent === normalized) return;
     store.set((s) => ({ ...s, appearance: { ...s.appearance, accent: normalized } }));
   },
@@ -134,7 +143,7 @@ export const actions = {
 // a relaunch go in here — mode + appearance. Library persistence lives in lib/library.js.
 let saveTimer;
 store.selectKey(
-  (s) => `${s.mode}|${s.appearance.scheme}|${s.appearance.accent}`,
+  (s) => `${s.mode}|${s.appearance.scheme}|${s.appearance.theme}|${s.appearance.accent}|${s.appearance.bg}`,
   (s) => {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {

@@ -9,6 +9,8 @@ import { store, actions } from './store.js';
 import { bootAuth } from './auth.js';
 import * as cmdk from './cmdk.js';
 import * as player from './player.js';
+import * as accent from './accent.js';
+import { isTheme, DEFAULT_THEME } from './themes.js';
 import { MODES, byId } from './modes/index.js';
 import { buildModeQueue, setModeSession } from './modes/session.js';
 import { bootLibrary, wirePlayTracking } from './lib/library.js';
@@ -28,12 +30,14 @@ const els = {
       mode: prefs.mode || 'all',
       appearance: {
         scheme: prefs.appearance?.scheme === 'light' ? 'light' : 'dark',
-        accent: /^#[0-9a-f]{6}$/i.test(prefs.appearance?.accent || '') ? prefs.appearance.accent.toLowerCase() : '#6eb5ff',
+        theme: isTheme(prefs.appearance?.theme) ? prefs.appearance.theme : DEFAULT_THEME,
+        accent: /^#[0-9a-f]{6}$/i.test(prefs.appearance?.accent || '') ? prefs.appearance.accent.toLowerCase() : null,
+        bg: null,
       },
     });
   }
   applyAppearance(store.get().appearance);
-  store.selectKey((s) => `${s.appearance.scheme}|${s.appearance.accent}`, (s) => {
+  store.selectKey((s) => `${s.appearance.scheme}|${s.appearance.theme}|${s.appearance.accent}`, (s) => {
     applyAppearance(s.appearance);
   });
 
@@ -127,10 +131,19 @@ async function activateMode(modeId) {
 
 function applyAppearance(appearance) {
   const scheme = appearance?.scheme === 'light' ? 'light' : 'dark';
-  const accent = /^#[0-9a-f]{6}$/i.test(appearance?.accent || '') ? appearance.accent : '#6eb5ff';
+  const theme = isTheme(appearance?.theme) ? appearance.theme : DEFAULT_THEME;
   document.body.dataset.scheme = scheme;
-  document.body.style.setProperty('--muse-accent', accent);
+  document.body.dataset.theme = theme;
+  // accent.js owns --muse-accent: user override > clamped cover colour > token.
+  accent.setScheme(scheme);
+  accent.setOverride(appearance?.accent || null);
   // Keep the native window backgroundColor in sync so the panel's fade/resize
   // never reveals a mismatched color behind it (the grey flash on summon).
-  window.muse.setWindowBg?.(scheme === 'light' ? '#f5f5f7' : '#1c1c1e');
+  // The resolved --bg is also persisted so main.js can paint the right colour
+  // on the *next* launch, before this renderer has booted.
+  const bg = getComputedStyle(document.body).getPropertyValue('--bg').trim();
+  if (/^#[0-9a-f]{6}$/i.test(bg)) {
+    window.muse.setWindowBg?.(bg);
+    if (store.get().appearance.bg !== bg) store.set((s) => ({ ...s, appearance: { ...s.appearance, bg } }));
+  }
 }

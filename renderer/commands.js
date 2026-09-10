@@ -16,6 +16,7 @@ import { toggleHeart } from './lib/library.js';
 import { api } from './api.js';
 import * as playlist from './playlist.js';
 import { GLYPH, prefix } from './glyphs.js';
+import { THEMES } from './themes.js';
 
 // ---- Shared entry factories -------------------------------------------------
 
@@ -34,13 +35,16 @@ function sharedActions(track) {
   return {
     altRun: async () => {
       const ok = store.race('song-run');
-      const similars = await fetchSimilar(track.id, { limit: 30 });
+      player.stageTrack(track);
+      let similars;
+      try { similars = await fetchSimilar(track.id, { limit: 30 }); }
+      catch (e) { player.unstage(); throw e; }
       if (!ok()) return {};
       setRadioSession(track);
-      await player.setQueue([track, ...similars], { startIdx: 0 });
+      Promise.resolve(player.setQueue([track, ...similars], { startIdx: 0 })).catch((e) => console.warn('[cmdk] setQueue', e));
       return similars.length
-        ? { ok: `radio · 1 + ${similars.length} tracks` }
-        : { warn: 'no similar tracks found, playing this one only' };
+        ? { home: true, ok: `radio · 1 + ${similars.length} tracks` }
+        : { home: true, warn: 'no similar tracks found, playing this one only' };
     },
     altLabel: 'start radio',
     heartRun: () => toggleHeart(track).then((r) => ({
@@ -57,18 +61,30 @@ export function songEntry(track, { glyph = GLYPH.LIKED, dim = false, group } = {
   const isHearted = store.get().library.tracks.some((t) => t.id === track.id);
   return {
     kind: isHearted ? 'library-song' : 'song',
+    home: true,          // Enter lands on the keypress; playback catches up (see cmdk.execute)
     glyph, dim, group,
     name: track.name || '',
     sub: formatArtists(track) || track.al?.name || '',
     dur: fmtDur(track.dt),
     run: async () => {
       const ok = store.race('song-run');
-      const result = await buildQueueForPickedTrack(track, { preserveMode: isHearted });
+      // Show the pick in the hero right now; the queue build below may take
+      // seconds (mode rebuilds hit the network). Rolled back on failure.
+      player.stageTrack(track);
+      let result;
+      try { result = await buildQueueForPickedTrack(track, { preserveMode: isHearted }); }
+      catch (e) { player.unstage(); throw e; }
       if (!ok()) return {};
       if (!result.mode) setManualSession(track);
-      await player.setQueue(result.queue, { startIdx: 0 });
+      // Not awaited: setQueue puts the track in the store synchronously and
+      // then fetches the stream URL. The landing must start on the keypress,
+      // not when the audio is ready — playback errors are handled in player.js
+      // (skip-forward fallback), so nothing here needs the promise.
+      Promise.resolve(player.setQueue(result.queue, { startIdx: 0 })).catch((e) => console.warn('[cmdk] setQueue', e));
       player.setLoop(!!result.mode?.singleLoop);
-      return { ok: `${describeSession()} · ${track.name}` };
+      // `home`: the palette returns to idle and the hero landing with the new
+      // cover is the confirmation (see cmdk.land). No toast for the track.
+      return { home: true };
     },
     ...sharedActions(track),
   };
@@ -77,14 +93,15 @@ export function songEntry(track, { glyph = GLYPH.LIKED, dim = false, group } = {
 function queueEntry(track, idx, isCurrent) {
   return {
     kind: isCurrent ? 'queue-current' : 'queue-item',
+    home: true,
     glyph: isCurrent ? GLYPH.PLAYING : GLYPH.QUEUED,
     name: track.name || '',
     sub: formatArtists(track) || track.al?.name || '',
     dur: fmtDur(track.dt),
     run: () => {
-      if (isCurrent) return { close: true };
+      if (isCurrent) return { home: true };
       player.playAt(idx);
-      return { ok: `playing · ${track.name}`, close: true };
+      return { home: true };
     },
     ...sharedActions(track),
   };
@@ -143,7 +160,7 @@ function commandMatches(q, parts) {
 }
 
 function parseAccentCommand(q) {
-  const m = String(q || '').trim().match(/^accent\s+(#[0-9a-f]{6})$/i);
+  const m = String(q || '').trim().match(/^accent\s+(#[0-9a-f]{6}|auto)$/i);
   return m ? m[1].toLowerCase() : null;
 }
 
@@ -264,9 +281,10 @@ export const COMMAND_BUILDERS = [
     .filter((m) => commandMatches(q, ['mode', 'radio', m.id, m.label, m.description || '']))
     .map((m) => ({
       kind: 'mode',
+      home: true,
       label: prefix(GLYPH.MODE) + m.label,
       hint: m.description || '',
-      run: () => { actions.setMode(m.id); return { ok: `mode · ${m.label}` }; },
+      run: () => { actions.setMode(m.id); return { home: true }; },
     })),
   // Appearance
   (q) => {
@@ -287,8 +305,37 @@ export const COMMAND_BUILDERS = [
         run: () => { actions.setAppearanceScheme('dark'); return { ok: 'appearance · dark' }; },
       });
     }
+    // /theme, /theme <id> — the material under the scheme (see themes.js)
+    const tokens = (q || '').trim().split(/\s+/).filter(Boolean);
+    const head = normalizeCommand(tokens[0] || '');
+    if (head && 'theme'.startsWith(head)) {
+      const f = normalizeCommand(tokens.slice(1).join(' '));
+      const cur = store.get().appearance.theme;
+      THEMES
+        .filter((t) => !f || normalizeCommand(t.id).includes(f) || normalizeCommand(t.description).includes(f))
+        .forEach((t) => out.push({
+          kind: 'theme',
+          label: `theme · ${t.label}`,
+          hint: (t.id === cur ? 'current · ' : '') + t.description,
+          run: () => { actions.setTheme(t.id); return { ok: `theme · ${t.label}` }; },
+        }));
+    } else if (!head || commandMatches(q, ['appearance', 'theme'])) {
+      out.push({
+        kind: 'theme-hint',
+        label: `theme · ${store.get().appearance.theme}`,
+        hint: 'change the material',
+        run: () => { setInput('/theme'); return {}; },
+      });
+    }
     const accent = parseAccentCommand(q);
-    if (accent) {
+    if (accent === 'auto') {
+      out.push({
+        kind: 'appearance',
+        label: 'appearance · accent auto',
+        hint: 'follow the album cover',
+        run: () => { actions.setAccent(null); return { ok: 'accent · auto' }; },
+      });
+    } else if (accent) {
       out.push({
         kind: 'appearance',
         label: 'appearance · accent',
@@ -298,9 +345,9 @@ export const COMMAND_BUILDERS = [
     } else if (commandMatches(q, ['accent', 'color', 'colour'])) {
       out.push({
         kind: 'appearance',
-        label: 'appearance · accent #rrggbb',
-        hint: `current ${store.get().appearance.accent}`,
-        run: () => ({ warn: 'usage: /accent #d8b35f' }),
+        label: 'appearance · accent #rrggbb | auto',
+        hint: `current ${store.get().appearance.accent || 'auto'}`,
+        run: () => ({ warn: 'usage: /accent #d8b35f · /accent auto' }),
       });
     }
     return out;

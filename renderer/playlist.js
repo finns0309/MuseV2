@@ -55,7 +55,7 @@ export async function load(plId) {
 
     setPlaylistSession({ id: plId, name, trackCount: queue.length });
     player.setQueue(queue, { startIdx: 0 });
-    return { ok: `${name} · ${queue.length} tracks` };
+    return { home: true, ok: `${name} · ${queue.length} tracks` };
   } catch (e) {
     return { warn: e?.message || 'failed to load playlist' };
   }

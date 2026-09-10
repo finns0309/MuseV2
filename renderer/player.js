@@ -18,6 +18,86 @@ let queueLoop = false;
 // + scrobbled instead of looping silently forever.
 let singleLoop = false;
 
+// ---- Current-track cache ----------------------------------------------------
+// NetEase stream URLs expire after ~20 min. The <audio> element only buffers
+// a slice, so resuming after a long pause used to mean: re-fetch the URL,
+// reload, seek back — a visible stall. Instead we keep exactly ONE track in
+// memory as a Blob: the one that's playing. It is fetched in the background
+// shortly after playback starts (so it never competes with the first
+// buffering), survives across pauses regardless of URL expiry, and is dropped
+// the moment a *different* track starts. Same track again (loop, re-pick from
+// search) keeps it — and plays from it instantly, no URL request at all.
+//
+// One song at standard quality is ~4–10 MB; Chromium may page a Blob to disk
+// on its own, but nothing is written by us, so there is no cache to clean up.
+
+const CACHE_DELAY_MS = 1500;
+let cache = { id: null, url: null, ctrl: null, size: 0 };
+let cacheTimer = null;
+let srcIsBlob = false;              // the element currently plays from `cache.url`
+
+function cacheReadyFor(id) { return cache.id === id && !!cache.url; }
+
+function dropCache() {
+  clearTimeout(cacheTimer);
+  cache.ctrl?.abort();
+  if (cache.url) URL.revokeObjectURL(cache.url);
+  cache = { id: null, url: null, ctrl: null, size: 0 };
+}
+
+// Schedule a background fetch of `url` for `track`. No-op if that track is
+// already cached or being cached.
+function cacheTrack(track, url) {
+  if (cache.id === track.id) return;          // same track: keep what we have
+  dropCache();
+  const ctrl = new AbortController();
+  cache = { id: track.id, url: null, ctrl, size: 0 };
+  cacheTimer = setTimeout(async () => {
+    if (cache.ctrl !== ctrl) return;
+    try {
+      const r = await fetch(url, { signal: ctrl.signal });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const blob = await r.blob();
+      if (cache.ctrl !== ctrl) return;        // superseded while downloading
+      cache.url = URL.createObjectURL(blob);
+      cache.size = blob.size;
+      console.info('[cache] ready', track.name, `${(blob.size / 1048576).toFixed(1)} MB`);
+    } catch (e) {
+      if (e?.name === 'AbortError') return;
+      console.warn('[cache] failed', track.name, e?.message || e);
+      if (cache.ctrl === ctrl) cache = { id: null, url: null, ctrl: null, size: 0 };
+    }
+  }, CACHE_DELAY_MS);
+}
+
+export function cacheInfo() {
+  return { id: cache.id, ready: !!cache.url, size: cache.size, srcIsBlob };
+}
+
+// ---- Optimistic switch ------------------------------------------------------
+// cmdk lands on the keypress, but building the queue for a picked track can
+// take seconds (mode rebuilds hit the network). Stage the track in the store
+// right away so the hero shows it immediately; playTrack() replaces the
+// snapshot when the real switch happens, unstage() restores it on failure.
+// The <audio> element is untouched (loadedTrackId still gates its events).
+
+let staged = null;                  // previous player snapshot while a stage is pending
+
+export function stageTrack(track) {
+  if (!track || staged) return;
+  const cur = store.get().player;
+  if (cur.track?.id === track.id) return;
+  staged = cur;
+  store.set((s) => ({ ...s, player: { ...s.player, track, currentTime: 0, duration: track.dt ? track.dt / 1000 : 0 } }));
+}
+
+export function unstage() {
+  if (!staged) return;
+  const prev = staged; staged = null;
+  // Only roll back if nothing else has moved the player since.
+  if (store.get().player.track?.id !== prev.track?.id) store.set((s) => ({ ...s, player: prev }));
+}
+
 // ---- Public actions ---------------------------------------------------------
 
 export async function playTrack(track, queue = null, queueIdx = -1) {
@@ -26,7 +106,10 @@ export async function playTrack(track, queue = null, queueIdx = -1) {
   const idx = queueIdx >= 0 ? queueIdx : q.findIndex((t) => t.id === track.id);
 
   const ok = store.race('player');
-  const prevSnapshot = store.get().player;
+  // A staged (optimistic) track is being made real now: the rollback point is
+  // the snapshot from *before* staging, not the staged one.
+  const prevSnapshot = staged || store.get().player;
+  staged = null;
 
   // Scrobble the previous track before we overwrite state. Safe to call even
   // if nothing is loaded yet (no-op when scrobbleTrack is null).
@@ -37,6 +120,18 @@ export async function playTrack(track, queue = null, queueIdx = -1) {
   // watches currentTime ≥ 30s; leaving the previous track's value in place
   // made a quick skip look like an instant 30s listen and logged phantom plays.
   store.set((s) => ({ ...s, player: { ...s.player, track, queue: q, queueIdx: idx, currentTime: 0, duration: track.dt ? track.dt / 1000 : 0 } }));
+
+  // Same track again and we hold it in memory: no URL round-trip at all.
+  if (cacheReadyFor(track.id)) {
+    audio.src = cache.url;
+    srcIsBlob = true;
+    loadedTrackId = track.id;
+    urlIssuedAt = Date.now();
+    pushPlayerState();
+    try { await audio.play(); }
+    catch (e) { console.warn('audio.play() (cached)', e); }
+    return;
+  }
 
   let url;
   try {
@@ -61,8 +156,10 @@ export async function playTrack(track, queue = null, queueIdx = -1) {
   }
 
   audio.src = url;
+  srcIsBlob = false;
   loadedTrackId = track.id;
   urlIssuedAt = Date.now();
+  cacheTrack(track, url);
   // Push meta now — lyrics can show the title immediately instead of waiting
   // for the first timeupdate after audio actually starts.
   pushPlayerState();
@@ -88,7 +185,9 @@ let loadedTrackId = null;
 let reloading = null;                // in-flight reload promise (dedupe)
 
 function urlStale() {
-  return !!audio.error || (urlIssuedAt > 0 && Date.now() - urlIssuedAt > URL_TTL_MS);
+  if (audio.error) return true;
+  if (srcIsBlob) return false;                 // a Blob never expires
+  return urlIssuedAt > 0 && Date.now() - urlIssuedAt > URL_TTL_MS;
 }
 
 // Re-fetch the current track's URL and restore playback position. Resolves
@@ -100,14 +199,20 @@ async function reloadCurrent({ autoplay }) {
     if (!track) return false;
     commitSegment();
     const pos = audio.currentTime || 0;
+    // Preferred path: the track is in memory — swap to the Blob, no network.
+    const fromCache = cacheReadyFor(track.id) && !srcIsBlob;
     let url;
-    try {
-      const r = await api('/song/url/v1', { id: track.id, level: 'standard' },
-        { timeout: 5_000, retry: { attempts: 2, baseDelayMs: 250 } });
-      url = r?.data?.[0]?.url;
-    } catch (e) {
-      console.warn('[player] reload url failed', e?.message || e);
-      return false;
+    if (fromCache) {
+      url = cache.url;
+    } else {
+      try {
+        const r = await api('/song/url/v1', { id: track.id, level: 'standard' },
+          { timeout: 5_000, retry: { attempts: 2, baseDelayMs: 250 } });
+        url = r?.data?.[0]?.url;
+      } catch (e) {
+        console.warn('[player] reload url failed', e?.message || e);
+        return false;
+      }
     }
     if (!url || store.get().player.track?.id !== track.id) return false;
     const ready = new Promise((resolve) => {
@@ -115,12 +220,14 @@ async function reloadCurrent({ autoplay }) {
       audio.addEventListener('error', resolve, { once: true });
     });
     audio.src = url;
+    srcIsBlob = fromCache;
     loadedTrackId = track.id;
     urlIssuedAt = Date.now();
+    if (!fromCache) cacheTrack(track, url);
     await ready;
     if (audio.error) return false;
     if (pos > 0 && pos < (audio.duration || Infinity)) audio.currentTime = pos;
-    console.info('[player] reloaded url', track.name, `at ${Math.round(pos)}s`);
+    console.info(fromCache ? '[player] resumed from cache' : '[player] reloaded url', track.name, `at ${Math.round(pos)}s`);
     if (autoplay) { try { await audio.play(); } catch (e) { console.warn('audio.play() after reload', e); return false; } }
     return true;
   })().finally(() => { reloading = null; });
@@ -155,11 +262,12 @@ export function setQueue(tracks, { startIdx = 0 } = {}) {
   }
   const idx = Math.max(0, Math.min(startIdx, tracks.length - 1));
   const target = tracks[idx];
-  const cur = store.get().player;
   // If the target is already playing, just attach the new queue without
   // reloading audio — matters most for single-loop activation so the current
   // track doesn't restart from 0s just because the user picked the mode.
-  if (cur.track?.id === target.id && !audio.paused) {
+  // Compare against what the <audio> element actually holds, not the store:
+  // a staged (optimistic) track is in the store before it plays.
+  if (loadedTrackId === target.id && !audio.paused) {
     store.set((s) => ({ ...s, player: { ...s.player, queue: tracks, queueIdx: idx } }));
     return;
   }

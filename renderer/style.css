@@ -26,31 +26,21 @@ input  { font: inherit; color: inherit; background: none; border: none; outline:
 .hidden { display: none !important; }
 
 /* ======================================================================== */
-/*  §LOGIN                                                                   */
-/* ======================================================================== */
-.login-pane {
-  position: fixed; inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg);
-  z-index: 100;
-  gap: 16px;
-}
-.login-pane h2 { font-weight: 400; font-size: 18px; }
-.login-pane img { width: 220px; height: 220px; background: #fff; padding: 8px; border-radius: 6px; }
-
-/* ======================================================================== */
 /*  §TOKENS — dark (default) + light scheme                                  */
 /* ======================================================================== */
+/* Type scale — five stops, nothing in between:
+     11  mono labels (section, footer, session, time)
+     12  secondary (artist, hint, duration)
+     13  body (rows, now-title in strip)
+     16  input
+     19  now-title in idle hero                                              */
 body {
   --bg: #1c1c1e;
   --bg-raised: rgba(255, 255, 255, 0.06);
   --bg-overlay: rgba(28, 28, 30, 0.82);
   --fg: rgba(255, 255, 255, 0.92);
-  --fg-muted: rgba(255, 255, 255, 0.50);
-  --fg-dim: rgba(255, 255, 255, 0.28);
+  --fg-muted: rgba(255, 255, 255, 0.55);   /* informational secondary text */
+  --fg-dim: rgba(255, 255, 255, 0.30);     /* decorative only: labels, durations */
   --line: rgba(255, 255, 255, 0.08);
   --line-strong: rgba(255, 255, 255, 0.14);
   --muse-accent: #6eb5ff;
@@ -62,8 +52,19 @@ body {
   --radius-lg: 16px;
   --font-display: "SF Pro Display", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --font-body: "SF Pro Text", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, Menlo, monospace;
+  --font-title: var(--font-display);            /* now-playing title face */
   --shadow-pop: 0 24px 80px -12px rgba(0, 0, 0, 0.55);
   --shadow-soft: 0 8px 32px -8px rgba(0, 0, 0, 0.35);
+  --shadow-cover: 0 2px 12px -2px rgba(0, 0, 0, 0.3);
+  --shadow-cover-idle:
+    0 4px 20px -4px color-mix(in srgb, var(--accent), transparent 40%),
+    0 18px 50px -12px color-mix(in srgb, var(--accent), transparent 70%),
+    0 0 0 0.5px rgba(255, 255, 255, 0.08) inset;
+  --cursor-ring:
+    0 0 0 1px color-mix(in srgb, var(--accent), transparent 55%),
+    inset 0 0 24px -6px color-mix(in srgb, var(--accent), transparent 40%);
+  --ambient-opacity: 0.28;
   background: transparent;
 }
 body[data-scheme="light"] {
@@ -71,8 +72,8 @@ body[data-scheme="light"] {
   --bg-raised: rgba(0, 0, 0, 0.04);
   --bg-overlay: rgba(245, 245, 247, 0.85);
   --fg: rgba(0, 0, 0, 0.88);
-  --fg-muted: rgba(0, 0, 0, 0.50);
-  --fg-dim: rgba(0, 0, 0, 0.25);
+  --fg-muted: rgba(0, 0, 0, 0.55);
+  --fg-dim: rgba(0, 0, 0, 0.30);
   --line: rgba(0, 0, 0, 0.06);
   --line-strong: rgba(0, 0, 0, 0.12);
   --muse-accent: #007aff;
@@ -80,6 +81,124 @@ body[data-scheme="light"] {
   --hover-bg-strong: rgba(0, 0, 0, 0.07);
   --shadow-pop: 0 24px 80px -12px rgba(0, 0, 0, 0.18);
   --shadow-soft: 0 8px 32px -8px rgba(0, 0, 0, 0.10);
+  --ambient-opacity: 0.20;
+}
+
+/* ---- Theme: paper — warm cream & ink, serif titles, softer corners ---- */
+body[data-theme="paper"] {
+  --bg: #1d1a16;
+  --bg-raised: rgba(240, 232, 220, 0.06);
+  --fg: rgba(240, 232, 220, 0.92);
+  --fg-muted: rgba(240, 232, 220, 0.56);
+  --fg-dim: rgba(240, 232, 220, 0.32);
+  --line: rgba(240, 232, 220, 0.09);
+  --line-strong: rgba(240, 232, 220, 0.16);
+  --muse-accent: #e2a06a;
+  --hover-bg: rgba(240, 232, 220, 0.05);
+  --hover-bg-strong: rgba(240, 232, 220, 0.09);
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --font-title: "New York", "Iowan Old Style", "Songti SC", Georgia, serif;
+  --ambient-opacity: 0.30;
+}
+body[data-theme="paper"][data-scheme="light"] {
+  --bg: #f4efe4;
+  --bg-raised: rgba(38, 30, 22, 0.05);
+  --fg: rgba(38, 30, 22, 0.90);
+  --fg-muted: rgba(38, 30, 22, 0.58);
+  --fg-dim: rgba(38, 30, 22, 0.34);
+  --line: rgba(38, 30, 22, 0.09);
+  --line-strong: rgba(38, 30, 22, 0.16);
+  --muse-accent: #b4532a;
+  --hover-bg: rgba(38, 30, 22, 0.05);
+  --hover-bg-strong: rgba(38, 30, 22, 0.08);
+  --shadow-cover: 0 2px 10px -2px rgba(38, 30, 22, 0.25);
+  --ambient-opacity: 0.22;
+}
+body[data-theme="paper"] .cmdk-now__title { font-weight: 500; letter-spacing: 0; }
+body[data-theme="paper"] .cmdk-panel.idle .cmdk-now__title { font-size: 21px; letter-spacing: -0.2px; }
+
+/* ---- Theme: mono — terminal: one monospace face, hard edges, no glow ---- */
+body[data-theme="mono"] {
+  --bg: #0e0f10;
+  --bg-raised: rgba(255, 255, 255, 0.05);
+  --fg: #e6e6e6;
+  --fg-muted: rgba(230, 230, 230, 0.58);
+  --fg-dim: rgba(230, 230, 230, 0.34);
+  --line: rgba(255, 255, 255, 0.12);
+  --line-strong: rgba(255, 255, 255, 0.22);
+  --muse-accent: #3ddc84;
+  --hover-bg: rgba(255, 255, 255, 0.05);
+  --hover-bg-strong: rgba(255, 255, 255, 0.09);
+  --radius-sm: 2px;
+  --radius-md: 2px;
+  --radius-lg: 2px;
+  --font-body: var(--font-mono);
+  --font-display: var(--font-mono);
+  --font-title: var(--font-mono);
+  --shadow-pop: none;
+  --shadow-soft: none;
+  --shadow-cover: none;
+  --shadow-cover-idle: 0 0 0 1px var(--line-strong);
+  --cursor-ring: 0 0 0 1px var(--accent);
+  --ambient-opacity: 0.10;
+}
+body[data-theme="mono"][data-scheme="light"] {
+  --bg: #f6f6f4;
+  --bg-raised: rgba(0, 0, 0, 0.04);
+  --fg: #141414;
+  --fg-muted: rgba(20, 20, 20, 0.60);
+  --fg-dim: rgba(20, 20, 20, 0.36);
+  --line: rgba(0, 0, 0, 0.12);
+  --line-strong: rgba(0, 0, 0, 0.22);
+  --muse-accent: #0b7a4b;
+  --hover-bg: rgba(0, 0, 0, 0.04);
+  --hover-bg-strong: rgba(0, 0, 0, 0.07);
+  --ambient-opacity: 0.08;
+}
+body[data-theme="mono"] .cmdk-mark { animation: none; opacity: 0.9; }
+body[data-theme="mono"] .cmdk-input { font-size: 15px; letter-spacing: 0; }
+body[data-theme="mono"] .cmdk-now__title { font-weight: 600; letter-spacing: 0; }
+body[data-theme="mono"] .cmdk-panel.idle .cmdk-now__title { font-size: 17px; letter-spacing: 0; }
+body[data-theme="mono"] .cmdk-cursor { background: var(--hover-bg); }
+body[data-theme="mono"] .cmdk-now__progress span::after { display: none; }
+body[data-theme="mono"] .cmdk-panel.idle .cmdk-now__cover { transform: none; }
+
+/* ======================================================================== */
+/*  §LOGIN                                                                   */
+/* ======================================================================== */
+.login-pane {
+  position: fixed; inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: var(--bg);
+  z-index: 100;
+  font-family: var(--font-display);
+  text-align: center;
+}
+.login-pane h2 {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+}
+.login-pane p,
+.login-pane [data-role=qr-status] {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  color: var(--fg-muted);
+}
+.login-pane img {
+  width: 200px;
+  height: 200px;
+  padding: 10px;
+  background: #fff;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-soft), 0 0 0 1px var(--line-strong);
 }
 
 /* ======================================================================== */
@@ -92,11 +211,8 @@ body[data-scheme="light"] {
   justify-content: stretch;
   z-index: 200;
 }
-.cmdk-backdrop {
-  position: absolute; inset: 0;
-  background: transparent;
-}
 .cmdk-panel {
+  position: relative;
   width: 100%;
   height: 100%;
   color: var(--fg);
@@ -105,28 +221,49 @@ body[data-scheme="light"] {
   flex-direction: column;
   overflow: hidden;
 }
+/* Content layers sit above the ambient wash (z 0). */
+.cmdk-now, .cmdk-input-row, .cmdk-list-wrap { position: relative; z-index: 1; }
 
-/* Drag strip for traffic lights */
+/* Drag strip for the (hover-only) traffic lights. The now-strip below is
+   draggable too, so this only needs to clear the buttons themselves. */
 .cmdk-panel::before {
   content: '';
   display: block;
-  flex: 0 0 28px;
+  flex: 0 0 14px;
   -webkit-app-region: drag;
 }
+
+/* ---- Ambient wash — album-average tint, painted under the content ---- */
+.cmdk-ambient {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 1200ms ease, background 1200ms ease;
+  background: radial-gradient(ellipse 140% 70% at 50% -10%, var(--amb, transparent), transparent 55%);
+}
+.cmdk-ambient[style*="--amb"] { opacity: var(--ambient-opacity); }
 
 /* ---- Now-playing strip (search mode) ---- */
 .cmdk-now {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) auto;
+  grid-template-columns: 42px minmax(0, 1fr);
   gap: 14px;
   align-items: center;
-  padding: 4px 20px 12px;
+  padding: 6px 20px 12px;
   border-bottom: 1px solid var(--line);
-  transition: padding 350ms cubic-bezier(0.2, 0.9, 0.25, 1),
-              gap 350ms cubic-bezier(0.2, 0.9, 0.25, 1),
-              border-color 350ms ease;
+  -webkit-app-region: drag;
+  transition: border-color 200ms ease;
 }
 .cmdk-now[hidden] { display: none; }
+/* The idle ⇄ search morph: layout snaps, the cover travels (FLIP, see
+   transitions.js) and the text next to it cross-fades in. */
+@keyframes meta-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: none; }
+}
+.cmdk-now__meta.meta-in { animation: meta-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 
 .cmdk-now__cover {
   width: 42px;
@@ -136,23 +273,22 @@ body[data-scheme="light"] {
   background-image: var(--cover, none);
   background-size: cover;
   background-position: center;
-  box-shadow: 0 2px 12px -2px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-cover);
   -webkit-app-region: no-drag;
-  transition: width 350ms cubic-bezier(0.2, 0.9, 0.25, 1),
-              height 350ms cubic-bezier(0.2, 0.9, 0.25, 1),
-              border-radius 350ms ease,
-              box-shadow 350ms ease,
-              background-color 600ms ease;
+  /* size / radius are NOT transitioned: the FLIP scale carries the move */
+  transition: box-shadow 350ms ease,
+              background-color 600ms ease,
+              opacity 300ms ease,
+              filter 300ms ease;
 }
 .cmdk-now__meta { min-width: 0; }
 .cmdk-now__title {
-  font-size: 13.5px;
+  font-family: var(--font-title);
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: -0.1px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  transition: font-size 300ms ease;
 }
 .cmdk-now__artist {
   margin-top: 2px;
@@ -161,19 +297,19 @@ body[data-scheme="light"] {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  transition: font-size 300ms ease, margin-top 300ms ease;
 }
-.cmdk-now__time {
-  color: var(--fg-dim);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  text-align: right;
+/* progress line + elapsed time share a row so they read as one instrument */
+.cmdk-now__progress-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
   -webkit-app-region: no-drag;
 }
 .cmdk-now__progress {
   position: relative;
+  flex: 1 1 auto;
   height: 2.5px;
-  margin-top: 8px;
   border-radius: 999px;
   background: var(--line);
   overflow: hidden;
@@ -185,7 +321,7 @@ body[data-scheme="light"] {
   border-radius: inherit;
   background: var(--accent);
   opacity: 0.8;
-  transition: background 800ms ease;
+  transition: background 800ms ease, opacity 300ms ease;
 }
 .cmdk-now__progress span::after {
   content: '';
@@ -198,19 +334,32 @@ body[data-scheme="light"] {
   filter: blur(3px);
   transition: opacity 400ms ease;
 }
+.cmdk-now__time {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--fg-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Paused: cover dims, line goes quiet, time says so ---- */
+.cmdk-panel.paused .cmdk-now__cover { opacity: 0.72; filter: saturate(0.7); }
+.cmdk-panel.paused .cmdk-now__progress span { opacity: 0.35; }
+.cmdk-panel.paused .cmdk-now__progress span::after { opacity: 0 !important; }
+.cmdk-panel.paused .cmdk-now__time::before { content: 'paused · '; }
 
 /* ---- Search input ---- */
 .cmdk-input-row {
-  position: relative;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 14px;
   align-items: center;
   padding: 14px 20px;
   border-bottom: 1px solid var(--line);
 }
 .cmdk-mark {
-  font-family: "SF Mono", ui-monospace, Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 17px;
   font-weight: 500;
   line-height: 1;
@@ -241,14 +390,29 @@ body[data-scheme="light"] {
   color: var(--fg-dim);
   font-weight: 400;
 }
+/* Session label — why the current queue exists (mode / manual / radio / playlist). */
+.cmdk-session {
+  max-width: 260px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  color: var(--fg-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color 800ms ease;
+}
+.cmdk-session:empty { display: none; }
 
 /* ---- Results list ---- */
 .cmdk-list-wrap {
   flex: 1 1 auto;
-  position: relative;
   overflow: hidden;
   min-height: 0;
+  transition: opacity 120ms ease;
 }
+/* search → idle, phase 1: rows fade before the hero grows (see cmdk.setIdle) */
+.cmdk-panel.leaving-search .cmdk-list-wrap { opacity: 0; }
 .cmdk-list {
   list-style: none;
   max-height: 100%;
@@ -265,7 +429,7 @@ body[data-scheme="light"] {
   gap: 14px;
   padding: 8px 12px;
   border-radius: var(--radius-sm);
-  font-size: 13.5px;
+  font-size: 13px;
   cursor: pointer;
   color: var(--fg);
   position: relative;
@@ -279,12 +443,11 @@ body[data-scheme="light"] {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  letter-spacing: -0.1px;
 }
 .cmdk-list .hint {
   flex: 0 1 auto;
   max-width: 45%;
-  color: var(--fg-dim);
+  color: var(--fg-muted);
   font-size: 12px;
   white-space: nowrap;
   overflow: hidden;
@@ -306,8 +469,8 @@ body[data-scheme="light"] {
   min-height: 0;
   padding: 12px 12px 5px;
   cursor: default;
-  font-family: "SF Mono", ui-monospace, Menlo, monospace;
-  font-size: 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--fg-dim);
@@ -334,7 +497,6 @@ body[data-scheme="light"] {
 }
 .cmdk-list li.song .nm {
   color: var(--fg);
-  letter-spacing: -0.1px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -343,8 +505,8 @@ body[data-scheme="light"] {
 .cmdk-list li.song .sub {
   flex: 0 1 auto;
   min-width: 0;
-  color: var(--fg-dim);
-  font-size: 12.5px;
+  color: var(--fg-muted);
+  font-size: 12px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -356,13 +518,6 @@ body[data-scheme="light"] {
   font-variant-numeric: tabular-nums;
 }
 .cmdk-list li.song .meta .dur { color: var(--fg-dim); font-size: 12px; }
-.cmdk-list li.song .meta .play {
-  color: var(--accent);
-  font-size: 11.5px;
-  opacity: 0;
-  transition: opacity 140ms ease;
-}
-.cmdk-list li.song.sel .meta .play { opacity: 1; }
 
 /* ---- Gliding cursor — accent ring + inner glow ---- */
 .cmdk-cursor {
@@ -371,9 +526,7 @@ body[data-scheme="light"] {
   width: 0; height: 0;
   border-radius: var(--radius-sm);
   background: var(--hover-bg-strong);
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--accent), transparent 55%),
-    inset 0 0 24px -6px color-mix(in srgb, var(--accent), transparent 40%);
+  box-shadow: var(--cursor-ring);
   opacity: 0;
   pointer-events: none;
   z-index: 0;
@@ -384,28 +537,19 @@ body[data-scheme="light"] {
               opacity 120ms ease;
   will-change: transform, width, height;
 }
-
-/* ---- Footer shortcut bar ---- */
-.cmdk-foot {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  min-height: 38px;
-  padding: 0 16px;
-  border-top: 1px solid var(--line);
-  font-family: "SF Mono", ui-monospace, Menlo, monospace;
-  font-size: 10.5px;
-  letter-spacing: 0.03em;
-  color: var(--fg-dim);
+/* Enter: the row is acknowledged before anything else moves. */
+.cmdk-cursor.commit {
+  background: color-mix(in srgb, var(--accent), transparent 78%);
+  box-shadow: 0 0 0 1px var(--accent);
+  transition: none;
 }
-.cmdk-foot .foot-keys b { color: var(--fg-muted); font-weight: 500; }
-.cmdk-panel.idle .cmdk-foot { display: none; }
 
-/* ---- Toast — bottom-right, sits in the footer's empty right side ---- */
+/* ---- Toast — top-right, above the now strip's empty right side. Never
+        near the elapsed time or the session label. ---- */
 .cmdk-toast {
   position: absolute;
-  right: 18px;
-  bottom: 11px;
+  right: 20px;
+  top: 18px;
   max-width: 56%;
   z-index: 10;
   padding: 0;
@@ -417,11 +561,11 @@ body[data-scheme="light"] {
   line-height: 16px;
   text-align: right;
   pointer-events: none;
-  transform: translateY(2px);
+  transform: translateY(-2px);
   transition: opacity 160ms ease, transform 160ms ease;
   font-variant-numeric: tabular-nums;
 }
-.cmdk-toast.show { opacity: 1; transform: translateY(0); }
+.cmdk-toast.show { opacity: 1; transform: none; }
 .cmdk-toast[data-level="ok"]    { color: var(--accent); }
 .cmdk-toast[data-level="warn"]  { color: #f0a030; }
 .cmdk-toast[data-level="error"] { color: #f06060; }
@@ -438,39 +582,29 @@ body[data-scheme="light"] {
   align-items: center;
   justify-content: center;
   gap: 14px;
-  padding: 48px 32px 24px;
+  padding: 36px 32px 24px;
   border-bottom: none;
   text-align: center;
-  -webkit-app-region: drag;
 }
 .cmdk-panel.idle .cmdk-now__cover {
   width: 180px;
   height: 180px;
   border-radius: var(--radius-lg);
-  box-shadow:
-    0 4px 20px -4px color-mix(in srgb, var(--accent), transparent 40%),
-    0 18px 50px -12px color-mix(in srgb, var(--accent), transparent 70%),
-    0 0 0 0.5px rgba(255, 255, 255, 0.08) inset;
+  box-shadow: var(--shadow-cover-idle);
   transition: box-shadow 800ms ease,
-              width 350ms cubic-bezier(0.2, 0.9, 0.25, 1),
-              height 350ms cubic-bezier(0.2, 0.9, 0.25, 1),
-              border-radius 350ms ease,
-              transform 200ms ease;
+              transform 200ms ease,
+              opacity 300ms ease,
+              filter 300ms ease;
   -webkit-app-region: no-drag;
   transform: perspective(600px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
   will-change: transform;
 }
-.cmdk-panel.idle .cmdk-now__meta { max-width: 80%; }
+/* Fixed-width meta so the progress line is the same length for every title. */
+.cmdk-panel.idle .cmdk-now__meta { width: min(360px, 80%); }
 .cmdk-panel.idle .cmdk-now__title { font-size: 19px; letter-spacing: -0.3px; }
-.cmdk-panel.idle .cmdk-now__artist { margin-top: 5px; font-size: 14px; }
-.cmdk-panel.idle .cmdk-now__progress { width: min(280px, 100%); margin: 4px auto 0; }
+.cmdk-panel.idle .cmdk-now__artist { margin-top: 5px; font-size: 13px; }
+.cmdk-panel.idle .cmdk-now__progress-row { width: min(280px, 100%); margin: 6px auto 0; }
 .cmdk-panel.idle .cmdk-now__progress span::after { opacity: 0.6; }
-.cmdk-panel.idle .cmdk-now__time {
-  position: absolute;
-  right: 20px; bottom: 20px;
-  font-size: 12px;
-  -webkit-app-region: no-drag;
-}
 .cmdk-panel.idle .cmdk-input-row {
   flex: 0 0 auto;
   border-top: 1px solid var(--line);
@@ -491,9 +625,10 @@ body[data-scheme="light"] {
 }
 .cmdk-list li.in { animation: cmdk-row-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
 
-/* List reveal (idle → search) */
+/* List reveal (idle → search) — rises under the strip while the cover
+   travels into it; same 200ms, one movement. */
 .cmdk-panel:not(.idle) .cmdk-list-wrap {
-  animation: list-reveal 250ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation: list-reveal 200ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 @keyframes list-reveal {
   from { opacity: 0; transform: translateY(8px); }
@@ -517,18 +652,19 @@ body[data-scheme="light"] {
 }
 .cmdk-now__title { animation: title-in 400ms cubic-bezier(0.2, 0.9, 0.25, 1); }
 
-/* Window appear / leave — fade + slight rise only (no scale, which would
-   expose the window's background color at the panel edges during the tween). */
+/* Window appear / leave — opacity only. No rise (the eye would chase the
+   panel before finding the caret), no scale (would expose the window bg at
+   the edges). In fast, out faster: summon 160ms, dismiss 110ms. */
 @keyframes panel-appear {
-  from { opacity: 0; transform: translateY(10px); }
-  to   { opacity: 1; transform: none; }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 @keyframes panel-leave {
-  from { opacity: 1; transform: none; }
-  to   { opacity: 0; transform: translateY(10px); }
+  from { opacity: 1; }
+  to   { opacity: 0; }
 }
-.cmdk-panel.appear { animation: panel-appear 280ms cubic-bezier(0.2, 0.9, 0.25, 1) both; }
-.cmdk-panel.leaving { animation: panel-leave 200ms cubic-bezier(0.4, 0, 1, 1) both; }
+.cmdk-panel.appear { animation: panel-appear 160ms ease-out both; }
+.cmdk-panel.leaving { animation: panel-leave 110ms ease-in both; }
 
 /* Track change cross-fade */
 @keyframes now-change {
@@ -546,28 +682,21 @@ body[data-scheme="light"] {
 }
 .cmdk-now:not([hidden]) { animation: now-enter 400ms cubic-bezier(0.2, 0.9, 0.25, 1); }
 
-/* ---- Ambient wash ---- */
-.cmdk-ambient {
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 1200ms ease, background 1200ms ease;
-  background: radial-gradient(ellipse 140% 70% at 50% -10%, var(--amb, transparent), transparent 55%);
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .cmdk-mark { opacity: 0.7; }
+  .cmdk-panel.idle .cmdk-now__cover { transform: none; }
 }
-.cmdk-ambient[style*="--amb"] { opacity: 0.28; }
-body[data-scheme="light"] .cmdk-ambient[style*="--amb"] { opacity: 0.18; }
 
 /* ======================================================================== */
-/*  §SCROLLBAR + RESPONSIVE                                                  */
+/*  §SCROLLBAR                                                               */
 /* ======================================================================== */
-::-webkit-scrollbar { width: 5px; }
-::-webkit-scrollbar-thumb { background: var(--fg-dim); border-radius: 3px; }
-::-webkit-scrollbar-track { background: transparent; }
-
-@media (max-width: 760px) {
-  .cmdk-input-row { padding: 12px 14px; }
-  .cmdk-now { padding: 12px 14px 10px; }
-  .cmdk-list .hint { max-width: 36%; }
-}
+/* Overlay-style: the thumb only shows while the pointer is over the list. */
+.cmdk-list::-webkit-scrollbar { width: 5px; }
+.cmdk-list::-webkit-scrollbar-track { background: transparent; }
+.cmdk-list::-webkit-scrollbar-thumb { background: transparent; border-radius: 3px; }
+.cmdk-list:hover::-webkit-scrollbar-thumb { background: var(--fg-dim); }
