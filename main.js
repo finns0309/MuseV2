@@ -301,7 +301,7 @@ function themeBg() {
 function createWindow() {
   win = new BrowserWindow({
     width: 720,
-    height: 440,
+    height: 480,
     minWidth: 520,
     minHeight: 120,
     backgroundColor: themeBg(),

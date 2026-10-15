@@ -1018,8 +1018,8 @@ body[data-theme="muse"] .cmdk-panel:not(.paused) .cmdk-mark {
   text-align: center;
 }
 .cmdk-panel.idle .cmdk-now__cover {
-  width: 156px;
-  height: 156px;
+  width: 148px;
+  height: 148px;
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-cover-idle);
   transition: box-shadow 800ms ease,

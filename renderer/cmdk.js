@@ -45,8 +45,11 @@ let phaseTimer = null;
 
 // Two fixed heights, nothing in between: the window must never change size
 // while the user is typing (async cloud results used to grow it mid-word).
-// Idle is a little taller than 16:9 to fit the composer's toolbar + chips.
-const IDLE_H = 440;
+// Idle is 3:2 — tall enough that the hero (cover, title, progress, the
+// song's story line) sits with air above it over the composer + chips.
+// Below ~470 the hero overflows its area and the cover gets pushed up
+// against the top edge.
+const IDLE_H = 480;
 const SEARCH_H = 560;
 const WIN_W = 720;
 let lastResizeH = 0;
