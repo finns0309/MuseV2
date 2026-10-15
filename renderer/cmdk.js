@@ -16,10 +16,12 @@ import * as tx from './transitions.js';
 import { COMMAND_BUILDERS, SONG_BUILDERS, ASYNC_BUILDERS, injectSetInput, formatArtists } from './commands.js';
 import { GLYPH } from './glyphs.js';
 import { toggleHeart } from './lib/library.js';
+import { MODES } from './modes/index.js';
 
 // ---- DOM refs ---------------------------------------------------------------
 
 let rootEl, panelEl, inputEl, listEl, toastEl, nowEl, nowCoverEl, nowTitleEl, nowArtistEl, nowTimeEl, nowProgressEl, sessionEl;
+let greetingEl, greetingTextEl, sendEl, heartEl, chipsEl;
 let cursorEl = null;
 
 // ---- State ------------------------------------------------------------------
@@ -36,13 +38,15 @@ let composing = false;    // IME composition in progress
 let idleTimer = null;     // staged search → idle transition
 let idleSeq = 0;          // invalidates an in-flight staged transition
 let landing = false;      // Enter → home choreography owns the now-area for a moment
+let thinking = false;     // cloud search in flight → the "✻ Searching NetEase…" row
 let nowMetaEl;
 
 // ---- Window resize ----------------------------------------------------------
 
 // Two fixed heights, nothing in between: the window must never change size
 // while the user is typing (async cloud results used to grow it mid-word).
-const IDLE_H = 405;
+// Idle is a little taller than 16:9 to fit the composer's toolbar + chips.
+const IDLE_H = 440;
 const SEARCH_H = 560;
 const WIN_W = 720;
 let lastResizeH = 0;
@@ -78,6 +82,10 @@ export function mount(el) {
   rootEl.innerHTML = `
     <div class="cmdk-panel">
       <div class="cmdk-ambient" data-role="ambient" aria-hidden="true"></div>
+      <div class="cmdk-greeting" data-role="greeting">
+        <span class="cmdk-greeting__spark" aria-hidden="true"></span>
+        <span data-role="greeting-text"></span>
+      </div>
       <div class="cmdk-now" data-role="now" hidden>
         <div class="cmdk-now__cover" data-role="now-cover"></div>
         <div class="cmdk-now__meta">
@@ -89,11 +97,20 @@ export function mount(el) {
           </div>
         </div>
       </div>
-      <div class="cmdk-input-row">
-        <span class="cmdk-mark" aria-hidden="true">${GLYPH.MARK}</span>
-        <input class="cmdk-input" spellcheck="false" aria-label="Search songs or commands">
-        <span class="cmdk-session" data-role="session" title="current session"></span>
+      <div class="cmdk-composer">
+        <div class="cmdk-input-row">
+          <span class="cmdk-mark" aria-hidden="true">${GLYPH.MARK}</span>
+          <input class="cmdk-input" spellcheck="false" placeholder="What would you like to hear?" aria-label="Search songs or commands">
+        </div>
+        <div class="cmdk-toolbar">
+          <button class="cmdk-tool" data-role="slash" title="Commands" aria-label="Commands">/</button>
+          <button class="cmdk-tool cmdk-tool--heart" data-role="heart" title="Like (⌘D)" aria-label="Like">${GLYPH.LIKED}</button>
+          <span class="cmdk-toolbar__gap"></span>
+          <button class="cmdk-session" data-role="session" title="Change mode"></button>
+          <button class="cmdk-send" data-role="send" aria-label="Play or pause"></button>
+        </div>
       </div>
+      <div class="cmdk-chips" data-role="chips"></div>
       <div class="cmdk-list-wrap">
         <ul class="cmdk-list"></ul>
       </div>
@@ -112,6 +129,11 @@ export function mount(el) {
   nowArtistEl  = rootEl.querySelector('[data-role=now-artist]');
   nowTimeEl    = rootEl.querySelector('[data-role=now-time]');
   nowProgressEl = rootEl.querySelector('[data-role=now-progress]');
+  greetingEl   = rootEl.querySelector('[data-role=greeting]');
+  greetingTextEl = rootEl.querySelector('[data-role=greeting-text]');
+  sendEl       = rootEl.querySelector('[data-role=send]');
+  heartEl      = rootEl.querySelector('[data-role=heart]');
+  chipsEl      = rootEl.querySelector('[data-role=chips]');
 
   // Gliding cursor — lives in the list wrapper, not inside the <ul>.
   cursorEl = document.createElement('div');
@@ -134,6 +156,7 @@ export function mount(el) {
   inputEl.addEventListener('compositionend', () => { composing = false; refresh(); });
   inputEl.addEventListener('input', () => { if (!composing) refresh(); });
   inputEl.addEventListener('keydown', onKey);
+  wireComposer();
 
   document.addEventListener('keydown', (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); actions.openCmdk(); }
@@ -170,7 +193,26 @@ export function mount(el) {
     (s) => panelEl.classList.toggle('paused', !!s.player.track && !s.player.playing)
   );
   // Why this queue exists — mode / manual / radio / playlist — always visible.
-  store.select((s) => s.playbackSession?.label ?? '', (label) => { sessionEl.textContent = label; });
+  store.selectKey(
+    (s) => `${s.playbackSession?.kind ?? ''}|${s.playbackSession?.modeId ?? ''}|${s.playbackSession?.label ?? ''}`,
+    (s) => { sessionEl.textContent = sessionText(s.playbackSession); }
+  );
+  // Composer state: the send button doubles as play/pause while the input is
+  // empty; the heart shows whether the current track is in the library.
+  store.selectKey((s) => `${s.player.playing}|${!!s.player.track}`, renderSend);
+  store.selectKey(
+    (s) => `${s.player.track?.id ?? 0}|${s.library.tracks.length}`,
+    (s) => {
+      const id = s.player.track?.id;
+      heartEl.classList.toggle('on', !!id && s.library.tracks.some((t) => t.id === id));
+      heartEl.disabled = !id;
+    }
+  );
+  store.selectKey(
+    (s) => `${s.playbackSession?.kind ?? ''}|${s.playbackSession?.modeId ?? ''}`,
+    renderChips
+  );
+  store.select((s) => s.user?.nickname ?? '', renderGreeting);
   // A theme swap changes row metrics (type, padding) under a cursor that was
   // measured for the old ones — re-seat it without the glide.
   store.selectKey(
@@ -183,6 +225,7 @@ export function mount(el) {
   // may have left a half-typed query behind.
   window.muse.onWindowAppear?.(() => {
     if (inputEl.value) { inputEl.value = ''; entries = []; renderList(); setIdle(true, { instant: true }); }
+    renderGreeting(store.get().user?.nickname ?? '');   // the hour may have turned
     tx.animateAppear(panelEl);
     inputEl.focus();
   });
@@ -193,6 +236,7 @@ export function mount(el) {
 function renderNow() {
   const p = store.get().player;
   const t = p.track;
+  greetingEl.hidden = !!t;
   if (!t) { nowEl.hidden = true; return; }
   nowEl.hidden = false;
 
@@ -243,7 +287,9 @@ function refresh() {
 
   lastQuery = isCmd ? '' : q;   // only highlight matches for bare search
   cursor = 0;
+  thinking = !isCmd && !!q;
   renderList();
+  renderSend();
 
   setIdle(!raw);
 
@@ -252,10 +298,13 @@ function refresh() {
   const ok = store.race('cmdk');
   if (isCmd || !q) return;
 
+  let pending = ASYNC_BUILDERS.length;
+  const settle = () => { if (ok() && --pending === 0) { thinking = false; renderList(); } };
   for (const b of ASYNC_BUILDERS) {
     b(q, { signal: searchCtrl.signal, ok })
-      .then((res) => { if (ok()) { entries.push(...res); renderList(); requestAnimationFrame(resizeToContent); } })
-      .catch(() => {});
+      .then((res) => { if (ok()) { entries.push(...res); requestAnimationFrame(resizeToContent); } })
+      .catch(() => {})
+      .finally(settle);
   }
 }
 
@@ -325,10 +374,11 @@ function renderList() {
   listEl.innerHTML = '';
   rowEls = [];
   if (!entries.length) {
-    if (inputEl.value.trim()) {
+    if (thinking) listEl.appendChild(thinkingRow());
+    else if (inputEl.value.trim()) {
       const li = document.createElement('li');
       li.className = 'cmdk-empty';
-      li.textContent = 'no results';
+      li.textContent = 'No matches';
       listEl.appendChild(li);
     }
     positionCursor(false);
@@ -383,7 +433,17 @@ function renderList() {
     listEl.appendChild(li);
     rowEls.push(li);
   });
+  if (thinking) listEl.appendChild(thinkingRow());
   positionCursor(false);
+}
+
+// Cloud search in flight: the spark turns and the words shimmer, the way a
+// reply is "thinking". Not selectable — it isn't in rowEls.
+function thinkingRow() {
+  const li = document.createElement('li');
+  li.className = 'cmdk-thinking';
+  li.innerHTML = '<span class="cmdk-spark" aria-hidden="true"></span><span class="cmdk-shimmer">Searching NetEase…</span>';
+  return li;
 }
 
 // Escape `text` and wrap the first case-insensitive occurrence of `q` in <mark>.
@@ -477,6 +537,83 @@ function execute(i, variant = 'primary') {
     .catch((err) => { console.warn('cmdk run', err); showToast(err?.message || String(err), 'error'); });
 }
 
+// ---- Composer, chips, greeting -----------------------------------------------
+//
+// The input is a composer card: a toolbar under the text line (commands, like,
+// the session/mode picker, a send button), mode chips below it at home, and a
+// greeting in place of the hero when nothing is playing. All of it is mouse
+// sugar over what the keyboard already does — nothing here is keyboard-only.
+
+const ICON = {
+  play:  '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.2 3.6v8.8a.6.6 0 0 0 .9.5l7-4.4a.6.6 0 0 0 0-1L6.1 3.1a.6.6 0 0 0-.9.5z" fill="currentColor"/></svg>',
+  pause: '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="4.2" y="3.4" width="2.6" height="9.2" rx=".9" fill="currentColor"/><rect x="9.2" y="3.4" width="2.6" height="9.2" rx=".9" fill="currentColor"/></svg>',
+  send:  '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 12.8V3.6M4 7.4l4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+};
+
+function wireComposer() {
+  // Buttons must never take focus from the input — the next keystroke is
+  // always a search.
+  rootEl.querySelectorAll('.cmdk-toolbar button, .cmdk-chips').forEach((b) => {
+    b.addEventListener('mousedown', (e) => e.preventDefault());
+  });
+  rootEl.querySelector('[data-role=slash]').addEventListener('click', () => setInputValue('/'));
+  heartEl.addEventListener('click', toggleCurrent);
+  sessionEl.addEventListener('click', () => setInputValue('/mode '));
+  sendEl.addEventListener('click', () => {
+    if (inputEl.value.trim()) execute(cursor, 'primary');
+    else player.toggle();
+  });
+  chipsEl.addEventListener('click', (e) => {
+    const chip = e.target.closest('[data-mode]');
+    if (chip) actions.setMode(chip.dataset.mode);
+  });
+}
+
+function setInputValue(v) {
+  inputEl.value = v;
+  inputEl.focus();
+  refresh();
+}
+
+function renderSend() {
+  if (!sendEl) return;
+  const typing = !!inputEl.value.trim();
+  const p = store.get().player;
+  const kind = typing ? 'send' : (p.playing ? 'pause' : 'play');
+  if (sendEl.dataset.kind === kind) return;
+  sendEl.dataset.kind = kind;
+  sendEl.innerHTML = ICON[kind];
+  sendEl.setAttribute('aria-label', typing ? 'Run' : (p.playing ? 'Pause' : 'Play'));
+  sendEl.disabled = !typing && !p.track;
+}
+
+function renderChips(s) {
+  const active = s.playbackSession?.kind === 'mode' ? s.playbackSession.modeId : null;
+  chipsEl.innerHTML = '';
+  for (const m of MODES) {
+    const b = document.createElement('button');
+    b.className = 'cmdk-chip' + (m.id === active ? ' on' : '');
+    b.dataset.mode = m.id;
+    b.title = m.description || '';
+    b.textContent = cap(m.label);
+    chipsEl.appendChild(b);
+  }
+}
+
+// The picker reads like a model name: "Daily", "Radio · 夜に駆ける".
+const cap = (t) => t.charAt(0).toUpperCase() + t.slice(1);
+function sessionText(session) {
+  if (!session) return '';
+  const mode = session.kind === 'mode' && MODES.find((m) => m.id === session.modeId);
+  return mode ? cap(mode.label) : cap(session.label || '');
+}
+
+function renderGreeting(nickname) {
+  const h = new Date().getHours();
+  const part = h < 5 ? 'Late night' : h < 12 ? 'Morning' : h < 18 ? 'Afternoon' : 'Evening';
+  greetingTextEl.textContent = nickname ? `${part}, ${nickname}` : part;
+}
+
 // ---- Helpers ----------------------------------------------------------------
 
 // Like / unlike whatever is playing right now. Toast is the only feedback
@@ -495,7 +632,7 @@ function doHide() {
 
 function showToast(msg, level = 'error') {
   if (!toastEl) return;
-  toastEl.textContent = msg;
+  toastEl.textContent = cap(String(msg));     // sentence case, whatever the caller wrote
   toastEl.dataset.level = level;
   toastEl.classList.add('show');
   clearTimeout(toastTimer);

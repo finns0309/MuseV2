@@ -259,14 +259,14 @@ function themeBg() {
     // The renderer persists the resolved panel bg (theme × scheme); fall back
     // to the default theme's colours for a first launch / stale prefs.
     if (/^#[0-9a-f]{6}$/i.test(a.bg || '')) return a.bg;
-    return a.scheme === 'light' ? '#f5f5f7' : '#1c1c1e';
-  } catch { return '#1c1c1e'; }
+    return a.scheme === 'light' ? '#faf9f5' : '#262624';
+  } catch { return '#262624'; }
 }
 
 function createWindow() {
   win = new BrowserWindow({
     width: 720,
-    height: 405,
+    height: 440,
     minWidth: 520,
     minHeight: 120,
     backgroundColor: themeBg(),

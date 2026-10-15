@@ -10,12 +10,12 @@
 // A pinned /accent still wins either way.
 
 export const THEMES = [
-  { id: 'muse',  label: 'muse',  description: 'quiet, airy — the default', followCover: true },
+  { id: 'muse',  label: 'muse',  description: 'quiet, airy — follows the cover', followCover: true },
   { id: 'paper', label: 'paper', description: 'printed matter: serif, vermilion ink', followCover: false },
   { id: 'mono',  label: 'mono',  description: 'monochrome terminal', followCover: false },
-  { id: 'claude', label: 'claude', description: 'warm ivory, clay, a little spark', followCover: false },
+  { id: 'claude', label: 'claude', description: 'warm ivory, clay, a little spark — the default', followCover: false },
 ];
 
-export const DEFAULT_THEME = 'muse';
+export const DEFAULT_THEME = 'claude';
 export const byId = Object.fromEntries(THEMES.map((t) => [t.id, t]));
 export const isTheme = (id) => Object.prototype.hasOwnProperty.call(byId, id);

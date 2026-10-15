@@ -65,6 +65,10 @@ body {
     0 0 0 1px color-mix(in srgb, var(--accent), transparent 55%),
     inset 0 0 24px -6px color-mix(in srgb, var(--accent), transparent 40%);
   --ambient-opacity: 0.28;
+  --radius-pill: 999px;
+  --composer-bg: var(--bg-raised);
+  --shadow-composer: 0 10px 28px -12px rgba(0, 0, 0, 0.5);
+  --on-accent: rgba(0, 0, 0, 0.82);     /* icon on an accent fill (send button) */
   background: transparent;
 }
 body[data-scheme="light"] {
@@ -82,6 +86,9 @@ body[data-scheme="light"] {
   --shadow-pop: 0 24px 80px -12px rgba(0, 0, 0, 0.18);
   --shadow-soft: 0 8px 32px -8px rgba(0, 0, 0, 0.10);
   --ambient-opacity: 0.20;
+  --composer-bg: #ffffff;
+  --shadow-composer: 0 4px 18px -6px rgba(0, 0, 0, 0.10);
+  --on-accent: #ffffff;
 }
 
 /* ---- Theme: paper — printed matter: serif, vermilion ink, grain ----
@@ -112,6 +119,10 @@ body[data-theme="paper"] {
     0 16px 32px -12px rgba(0, 0, 0, 0.55);
   --cursor-ring: inset 2px 0 0 var(--accent);
   --ambient-opacity: 0;
+  --radius-pill: 3px;
+  --composer-bg: rgba(236, 228, 214, 0.035);
+  --shadow-composer: none;
+  --on-accent: #fff;
   --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.93 0 0 0 0 0.89 0 0 0 0 0.82 3 0 0 0 -1.45'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23g)' opacity='0.05'/%3E%3C/svg%3E");
 }
 body[data-theme="paper"][data-scheme="light"] {
@@ -123,6 +134,8 @@ body[data-theme="paper"][data-scheme="light"] {
   --line: rgba(42, 36, 29, 0.10);
   --line-strong: rgba(42, 36, 29, 0.20);
   --muse-accent: #b13b26;
+  --composer-bg: #f7f3ea;
+  --shadow-composer: 0 1px 2px rgba(60, 44, 28, 0.06);
   --hover-bg: rgba(42, 36, 29, 0.035);
   --hover-bg-strong: rgba(42, 36, 29, 0.05);
   --shadow-cover: 0 1px 2px rgba(60, 44, 28, 0.22), 0 4px 10px -4px rgba(60, 44, 28, 0.25);
@@ -159,6 +172,10 @@ body[data-theme="mono"] {
   --shadow-cover-idle: 0 0 0 6px var(--bg), 0 0 0 7px var(--line-strong);
   --cursor-ring: none;
   --ambient-opacity: 0;
+  --radius-pill: 0;
+  --composer-bg: transparent;
+  --shadow-composer: none;
+  --on-accent: var(--bg);
 }
 body[data-theme="mono"][data-scheme="light"] {
   --bg: #f6f6f4;
@@ -200,6 +217,7 @@ body[data-theme="claude"] {
     0 2px 4px rgba(0, 0, 0, 0.18),
     0 18px 40px -16px rgba(0, 0, 0, 0.6);
   --shadow-composer: 0 4px 20px rgba(0, 0, 0, 0.18), 0 1px 2px rgba(0, 0, 0, 0.12);
+  --on-accent: #fff;
   --cursor-ring: none;
   --ambient-opacity: 0;
 }
@@ -279,7 +297,7 @@ body[data-theme="claude"][data-scheme="light"] {
   overflow: hidden;
 }
 /* Content layers sit above the ambient wash (z 0). */
-.cmdk-now, .cmdk-input-row, .cmdk-list-wrap { position: relative; z-index: 1; }
+.cmdk-now, .cmdk-greeting, .cmdk-composer, .cmdk-chips, .cmdk-list-wrap { position: relative; z-index: 1; }
 
 /* Drag strip for the (hover-only) traffic lights. The now-strip below is
    draggable too, so this only needs to clear the buttons themselves. */
@@ -309,9 +327,7 @@ body[data-theme="claude"][data-scheme="light"] {
   gap: 14px;
   align-items: center;
   padding: 6px 20px 12px;
-  border-bottom: 1px solid var(--line);
   -webkit-app-region: drag;
-  transition: border-color 200ms ease;
 }
 .cmdk-now[hidden] { display: none; }
 /* The idle ⇄ search morph: layout snaps, the cover travels (FLIP, see
@@ -404,16 +420,26 @@ body[data-theme="claude"][data-scheme="light"] {
 .cmdk-panel.paused .cmdk-now__cover { opacity: 0.72; filter: saturate(0.7); }
 .cmdk-panel.paused .cmdk-now__progress span { opacity: 0.35; }
 .cmdk-panel.paused .cmdk-now__progress span::after { opacity: 0 !important; }
-.cmdk-panel.paused .cmdk-now__time::before { content: 'paused · '; }
+.cmdk-panel.paused .cmdk-now__time::before { content: 'Paused · '; }
 
-/* ---- Search input ---- */
+/* ---- Composer — the input as a card: a text line over a toolbar ---- */
+/* Same object in both states; the hero and the list arrange around it. Its
+   left edge lines up with the list cursor, so the mark sits over the glyphs. */
+.cmdk-composer {
+  flex: 0 0 auto;
+  margin: 2px 8px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  background: var(--composer-bg);
+  box-shadow: var(--shadow-composer);
+  transition: background 320ms ease, border-color 320ms ease;
+}
 .cmdk-input-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 14px;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
   align-items: center;
-  padding: 14px 20px;
-  border-bottom: 1px solid var(--line);
+  padding: 11px 16px 3px 12px;
 }
 .cmdk-mark {
   font-family: var(--font-mono);
@@ -447,19 +473,120 @@ body[data-theme="claude"][data-scheme="light"] {
   color: var(--fg-dim);
   font-weight: 400;
 }
-/* Session label — why the current queue exists (mode / manual / radio / playlist). */
-.cmdk-session {
-  max-width: 260px;
+/* Toolbar: commands · like ……… session picker · send */
+.cmdk-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px 8px;
+}
+.cmdk-toolbar__gap { flex: 1 1 auto; }
+.cmdk-tool {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
   font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.03em;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--fg-muted);
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.cmdk-tool:hover:not(:disabled) { background: var(--hover-bg-strong); color: var(--fg); }
+.cmdk-tool:disabled { opacity: 0.4; cursor: default; }
+.cmdk-tool--heart { font-family: var(--font-body); font-size: 12px; }
+.cmdk-tool--heart.on { color: var(--accent); border-color: color-mix(in srgb, var(--accent), transparent 60%); }
+/* Session label — why the current queue exists (mode / manual / radio /
+   playlist). Sits where a model picker would; clicking opens /mode. */
+.cmdk-session {
+  display: inline-flex;
+  align-items: center;
+  max-width: 280px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
   color: var(--fg-muted);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  transition: color 800ms ease;
+  transition: background 120ms ease, color 120ms ease;
 }
+.cmdk-session:hover { background: var(--hover-bg-strong); color: var(--fg); }
 .cmdk-session:empty { display: none; }
+.cmdk-session::after {
+  content: '';
+  flex: 0 0 auto;
+  width: 5px;
+  height: 5px;
+  margin: -3px 0 0 8px;
+  border-right: 1.3px solid currentColor;
+  border-bottom: 1.3px solid currentColor;
+  transform: rotate(45deg);
+  opacity: 0.7;
+}
+/* Send: play/pause while the input is empty, ↑ (run) once there's a query. */
+.cmdk-send {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  margin-left: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--on-accent);
+  transition: background 600ms ease, opacity 200ms ease, transform 120ms ease;
+}
+.cmdk-send svg { width: 16px; height: 16px; display: block; }
+.cmdk-send:hover:not(:disabled) { filter: brightness(1.07); }
+.cmdk-send:active:not(:disabled) { transform: scale(0.94); }
+.cmdk-send:disabled { opacity: 0.35; cursor: default; }
+
+/* ---- Chips — the listening modes, under the composer at home ---- */
+.cmdk-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 16px 14px;
+}
+.cmdk-panel:not(.idle) .cmdk-chips { display: none; }
+.cmdk-chip {
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  font-size: 12.5px;
+  color: var(--fg-muted);
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.cmdk-chip:hover { background: var(--hover-bg-strong); color: var(--fg); }
+.cmdk-chip.on {
+  color: var(--fg);
+  border-color: color-mix(in srgb, var(--accent), transparent 45%);
+  background: color-mix(in srgb, var(--accent), transparent 90%);
+}
+
+/* ---- Greeting — the hero when nothing is playing ---- */
+.cmdk-greeting { display: none; }
+.cmdk-panel.idle .cmdk-greeting:not([hidden]) {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 0 32px 8px;
+  font-family: var(--font-title);
+  font-size: 30px;
+  letter-spacing: -0.4px;
+  color: var(--fg);
+  -webkit-app-region: drag;
+}
+.cmdk-greeting__spark::before {
+  content: '✻';
+  font-family: var(--font-body);
+  color: var(--accent);
+}
 
 /* ---- Results list ---- */
 .cmdk-list-wrap {
@@ -517,6 +644,27 @@ body[data-theme="claude"][data-scheme="light"] {
   min-height: 48px;
   cursor: default;
 }
+/* Cloud search in flight: spark + shimmering words (cmdk.thinkingRow). */
+.cmdk-list li.cmdk-thinking {
+  justify-content: flex-start;
+  gap: 12px;
+  cursor: default;
+}
+.cmdk-spark::before {
+  content: '✻';
+  display: inline-block;
+  width: 1.1em;
+  text-align: center;
+  color: var(--accent);
+  animation: spark 1.1s linear infinite;
+}
+.cmdk-shimmer {
+  color: transparent;
+  background: linear-gradient(90deg, var(--fg-dim) 0 35%, var(--fg) 50%, var(--fg-dim) 65% 100%) 0 0 / 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: shimmer 1.8s linear infinite;
+}
 
 /* ---- Section header (library / from netease) ---- */
 .cmdk-list li.cmdk-sec {
@@ -524,15 +672,13 @@ body[data-theme="claude"][data-scheme="light"] {
   justify-content: space-between;
   align-items: baseline;
   min-height: 0;
-  padding: 12px 12px 5px;
+  padding: 12px 12px 6px;
   cursor: default;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--fg-dim);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fg-muted);
 }
-.cmdk-list li.cmdk-sec .sec-cnt { font-variant-numeric: tabular-nums; }
+.cmdk-list li.cmdk-sec .sec-cnt { font-weight: 400; color: var(--fg-dim); font-variant-numeric: tabular-nums; }
 
 /* ---- Structured song row: glyph · name + artist · duration ---- */
 .cmdk-list li.song {
@@ -601,31 +747,34 @@ body[data-theme="claude"][data-scheme="light"] {
   transition: none;
 }
 
-/* ---- Toast — top-right, above the now strip's empty right side. Never
-        near the elapsed time or the session label. ---- */
+/* ---- Toast — an inverted pill floating at the bottom centre ---- */
 .cmdk-toast {
   position: absolute;
-  right: 20px;
-  top: 18px;
-  max-width: 56%;
+  left: 50%;
+  bottom: 16px;
+  max-width: 72%;
   z-index: 10;
-  padding: 0;
-  opacity: 0;
-  color: var(--fg-muted);
-  background: transparent;
-  border: 0;
-  font-size: 11px;
+  padding: 7px 14px 7px 12px;
+  border-radius: var(--radius-pill);
+  background: var(--fg);
+  color: var(--bg);
+  box-shadow: 0 10px 28px -10px rgba(0, 0, 0, 0.45);
+  font-size: 12px;
   line-height: 16px;
-  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0;
   pointer-events: none;
-  transform: translateY(-2px);
-  transition: opacity 160ms ease, transform 160ms ease;
+  transform: translate(-50%, 8px);
+  transition: opacity 160ms ease, transform 220ms cubic-bezier(0.2, 0.9, 0.25, 1);
   font-variant-numeric: tabular-nums;
 }
-.cmdk-toast.show { opacity: 1; transform: none; }
-.cmdk-toast[data-level="ok"]    { color: var(--accent); }
-.cmdk-toast[data-level="warn"]  { color: #f0a030; }
-.cmdk-toast[data-level="error"] { color: #f06060; }
+.cmdk-toast.show { opacity: 1; transform: translate(-50%, 0); }
+.cmdk-toast::before { margin-right: 7px; font-weight: 600; }
+.cmdk-toast[data-level="ok"]::before    { content: '✓'; color: color-mix(in srgb, var(--accent), var(--bg) 25%); }
+.cmdk-toast[data-level="warn"]::before  { content: '!'; color: #f0a030; }
+.cmdk-toast[data-level="error"]::before { content: '×'; color: #f06060; }
 
 /* ======================================================================== */
 /*  §IDLE — now-playing hero + input at bottom                               */
@@ -639,13 +788,12 @@ body[data-theme="claude"][data-scheme="light"] {
   align-items: center;
   justify-content: center;
   gap: 14px;
-  padding: 36px 32px 24px;
-  border-bottom: none;
+  padding: 18px 32px 18px;
   text-align: center;
 }
 .cmdk-panel.idle .cmdk-now__cover {
-  width: 180px;
-  height: 180px;
+  width: 156px;
+  height: 156px;
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-cover-idle);
   transition: box-shadow 800ms ease,
@@ -662,11 +810,10 @@ body[data-theme="claude"][data-scheme="light"] {
 .cmdk-panel.idle .cmdk-now__artist { margin-top: 5px; font-size: 13px; }
 .cmdk-panel.idle .cmdk-now__progress-row { width: min(280px, 100%); margin: 6px auto 0; }
 .cmdk-panel.idle .cmdk-now__progress span::after { opacity: 0.6; }
-.cmdk-panel.idle .cmdk-input-row {
-  flex: 0 0 auto;
-  border-top: 1px solid var(--line);
-  border-bottom: none;
-}
+.cmdk-panel.idle .cmdk-composer { margin: 0 14px 12px; }
+/* At home the bottom edge belongs to the chips: float the toast just above
+   the composer instead (composer 80 + 12 gap + chips 42). */
+.cmdk-panel.idle .cmdk-toast { bottom: 146px; }
 .cmdk-panel.idle .cmdk-list-wrap { flex: 0 0 0; overflow: hidden; opacity: 0; }
 .cmdk-panel.idle .cmdk-list { opacity: 0; pointer-events: none; }
 .cmdk-panel.idle .cmdk-cursor { opacity: 0 !important; }
@@ -739,6 +886,24 @@ body[data-theme="claude"][data-scheme="light"] {
 }
 .cmdk-now:not([hidden]) { animation: now-enter 400ms cubic-bezier(0.2, 0.9, 0.25, 1); }
 
+/* ✻ — the CLI's thinking-spinner frames, ping-ponged. */
+@keyframes spark {
+  0%   { content: '·'; }
+  10%  { content: '✢'; }
+  20%  { content: '✳'; }
+  30%  { content: '✶'; }
+  40%  { content: '✻'; }
+  50%  { content: '✽'; }
+  60%  { content: '✻'; }
+  70%  { content: '✶'; }
+  80%  { content: '✳'; }
+  90%  { content: '✢'; }
+}
+@keyframes shimmer {
+  from { background-position: 100% 0; }
+  to   { background-position: 0% 0; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
@@ -762,14 +927,6 @@ body[data-theme="claude"][data-scheme="light"] {
 body[data-theme="paper"] .cmdk-panel,
 body[data-theme="paper"] .login-pane { background: var(--grain), var(--bg); }
 
-/* Rules are printed, not drawn edge to edge: inset to the text column. */
-body[data-theme="paper"] .cmdk-now,
-body[data-theme="paper"] .cmdk-input-row {
-  border-color: transparent;
-  background: linear-gradient(var(--line-strong), var(--line-strong)) no-repeat 50% 100% / calc(100% - 40px) 1px;
-}
-body[data-theme="paper"] .cmdk-panel.idle .cmdk-now { background: none; }
-body[data-theme="paper"] .cmdk-panel.idle .cmdk-input-row { border-color: transparent; background-position: 50% 0; }
 
 body[data-theme="paper"] .cmdk-now__title { font-size: 14px; font-weight: 400; letter-spacing: 0; }
 body[data-theme="paper"] .cmdk-now__artist { font-style: italic; font-size: 12.5px; }
@@ -808,6 +965,7 @@ body[data-theme="paper"] .cmdk-list li.cmdk-sec {
   gap: 8px;
   padding: 14px 12px 4px;
   font-size: 12px;
+  font-weight: 400;
   text-transform: none;
   font-variant-caps: all-small-caps;
   letter-spacing: 0.08em;
@@ -862,8 +1020,11 @@ body[data-theme="mono"] .cmdk-list li.song .nm mark {
   background: linear-gradient(currentColor, currentColor) no-repeat 0 100% / 100% 1px;
 }
 
-/* LIBRARY ─────────────────────────── 8 */
-body[data-theme="mono"] .cmdk-list li.cmdk-sec { align-items: center; gap: 10px; min-height: 0; padding: 14px 12px 6px; font-size: 11px; }
+/* YOUR LIBRARY ────────────────────── 8 */
+body[data-theme="mono"] .cmdk-list li.cmdk-sec {
+  align-items: center; gap: 10px; min-height: 0; padding: 14px 12px 6px;
+  font-size: 11px; font-weight: 400; letter-spacing: 0.12em; text-transform: uppercase; color: var(--fg-dim);
+}
 body[data-theme="mono"] .cmdk-list li.cmdk-empty { min-height: 48px; }
 body[data-theme="mono"] .cmdk-list li.cmdk-sec::after {
   content: '';
@@ -876,8 +1037,6 @@ body[data-theme="mono"] .cmdk-list li.cmdk-sec .sec-cnt { order: 2; }
 
 body[data-theme="mono"] .cmdk-mark { color: var(--fg); animation: none; opacity: 1; font-size: 15px; }
 body[data-theme="mono"] .cmdk-input { font-size: 14px; letter-spacing: 0; }
-body[data-theme="mono"] .cmdk-session::before { content: '['; color: var(--fg-dim); }
-body[data-theme="mono"] .cmdk-session::after  { content: ']'; color: var(--fg-dim); }
 
 body[data-theme="mono"] .cmdk-now__title { font-weight: 700; letter-spacing: 0; }
 body[data-theme="mono"] .cmdk-now__artist { font-size: 11.5px; }
@@ -904,18 +1063,6 @@ body[data-theme="mono"] .cmdk-panel.paused .cmdk-now__progress span { opacity: 0
 body[data-theme="mono"] .cmdk-panel.paused .cmdk-now__cover { opacity: 0.8; filter: grayscale(1); }
 
 /* ---- claude --------------------------------------------------------------- */
-/* The input is a composer card, not a ruled row — same place in both states,
-   so it reads as one object the hero and the list arrange themselves around. */
-body[data-theme="claude"] .cmdk-now { border-bottom-color: transparent; }
-body[data-theme="claude"] .cmdk-panel .cmdk-input-row {
-  margin: 2px 8px 8px;            /* card edge = cursor edge; ✻ over the row glyphs */
-  padding: 12px 16px 12px 11px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-lg);
-  background: var(--bg-raised);
-  box-shadow: var(--shadow-composer);
-}
-body[data-theme="claude"] .cmdk-panel.idle .cmdk-input-row { margin: 0 14px 14px; }
 body[data-theme="claude"] .cmdk-input { font-size: 15px; letter-spacing: -0.1px; }
 body[data-theme="claude"] .cmdk-session { font-size: 12px; letter-spacing: 0; }
 
@@ -937,21 +1084,9 @@ body[data-theme="claude"] .cmdk-mark::before {
   font-family: var(--font-body);
   font-size: 18px;
   line-height: 1;
-  animation: claude-spark 2.2s linear infinite;
+  animation: spark 2.2s linear infinite;
 }
 body[data-theme="claude"] .cmdk-panel.paused .cmdk-mark::before { animation: none; opacity: 0.5; }
-@keyframes claude-spark {
-  0%   { content: '·'; }
-  10%  { content: '✢'; }
-  20%  { content: '✳'; }
-  30%  { content: '✶'; }
-  40%  { content: '✻'; }
-  50%  { content: '✽'; }
-  60%  { content: '✻'; }
-  70%  { content: '✶'; }
-  80%  { content: '✳'; }
-  90%  { content: '✢'; }
-}
 
 /* Headline in serif, everything else in the system face. */
 body[data-theme="claude"] .cmdk-now__title { font-size: 14px; font-weight: 400; letter-spacing: 0; }
@@ -966,18 +1101,6 @@ body[data-theme="claude"] .cmdk-now__progress span { opacity: 1; }
 body[data-theme="claude"] .cmdk-now__progress span::after { display: none; }
 body[data-theme="claude"] .cmdk-panel.paused .cmdk-now__progress span { opacity: 0.45; }
 
-/* Section heads like a sidebar's "Recents": sentence case, quiet weight. */
-body[data-theme="claude"] .cmdk-list li.cmdk-sec {
-  padding: 12px 12px 6px;
-  font-family: var(--font-body);
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0;
-  text-transform: none;
-  color: var(--fg-muted);
-}
-body[data-theme="claude"] .cmdk-list li.cmdk-sec .sec-lbl::first-letter { text-transform: uppercase; }
-body[data-theme="claude"] .cmdk-list li.cmdk-sec .sec-cnt { color: var(--fg-dim); font-weight: 400; }
 body[data-theme="claude"] .cmdk-list li.song .gl { color: var(--accent); font-size: 12px; }
 body[data-theme="claude"] .cmdk-list li.song.dim .gl { color: var(--fg-dim); }
 body[data-theme="claude"] .cmdk-list li.song .nm mark { font-weight: 500; }

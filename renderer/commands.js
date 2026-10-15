@@ -363,7 +363,7 @@ export const SONG_BUILDERS = [
     if (q.length < 1) return [];
     return scoreLibrary(q, store.get().library.tracks)
       .slice(0, 8)
-      .map(({ track }) => songEntry(track, { glyph: GLYPH.LIKED, group: 'library' }));
+      .map(({ track }) => songEntry(track, { glyph: GLYPH.LIKED, group: 'Your library' }));
   },
 ];
 
@@ -377,14 +377,14 @@ export const ASYNC_BUILDERS = [
     } catch { return []; }
     if (!ok()) return [];
     const inLib = new Set(store.get().library.tracks.map((t) => t.id));
-    // Cloud hits live in their own "from netease" group, marked with a dimmed
+    // Cloud hits live in their own "From NetEase" group, marked with a dimmed
     // ↓ (not-yet-yours). Library hits keep ♥; ▶ stays reserved for the
     // currently-playing track.
     return songs
       .filter((s) => !inLib.has(s.id))
       .map((s) => songEntry(
         { id: s.id, name: s.name, ar: s.ar, al: s.al, dt: s.dt },
-        { glyph: GLYPH.NETEASE, dim: true, group: 'from netease' }
+        { glyph: GLYPH.NETEASE, dim: true, group: 'From NetEase' }
       ));
   },
 ];
