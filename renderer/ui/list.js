@@ -4,6 +4,7 @@
 // decides how it looks and which row is selected. Entries are plain objects
 // from commands.js — a song (has `name`) or a menu item (has `title`).
 
+import { store } from '../store.js';
 import { icon } from '../icons.js';
 import { GLYPH } from '../glyphs.js';
 
@@ -28,6 +29,31 @@ export function mountList({ list, cursor: cur, keys, execute, scoped, cursorChan
   inScope = scoped || inScope;
   onCursor = cursorChanged || onCursor;
   listEl.addEventListener('scroll', () => seat(true), { passive: true });
+  // The playing song's row follows the player while the list is open.
+  store.select((s) => s.player.track?.id ?? null, (id, prev) => { if (prev !== undefined) markPlaying(id); });
+}
+
+const playingId = () => store.get().player.track?.id ?? null;
+const isPlaying = (e) => e?.track?.id != null && e.track.id === playingId();
+
+// ♫ — three bars on the thumbnail of the song that's playing (they rest
+// when paused, via .cmdk-panel.paused in CSS).
+function markPlaying(id) {
+  rowEls.forEach((li, i) => {
+    const on = id != null && entries[i]?.track?.id === id;
+    li.classList.toggle('playing', on);
+    const tile = li.querySelector('.tile.thumb');
+    if (tile && on && !tile.querySelector('.eq')) tile.append(eqBars());
+    if (tile && !on) tile.querySelector('.eq')?.remove();
+  });
+  renderKeys();
+}
+
+function eqBars() {
+  const eq = document.createElement('span');
+  eq.className = 'eq';
+  eq.innerHTML = '<i></i><i></i><i></i>';
+  return eq;
 }
 
 export const getEntries = () => entries;
@@ -120,6 +146,7 @@ function songRow(li, e, showLiked, i) {
   if (e.cover) {
     th.appendChild(coverImg(e.cover, 64, () => { th.innerHTML = icon('music'); }));
   } else th.innerHTML = icon('music');
+  if (isPlaying(e)) { li.classList.add('playing'); th.append(eqBars()); }
   const main = document.createElement('div'); main.className = 'rowmain';
   const nm = document.createElement('span'); nm.className = 'nm'; highlightInto(nm, e.name, query);
   main.append(nm);
@@ -195,8 +222,9 @@ function promptRow(text) {
 function rowActions(e) {
   const out = [];
   if (e.moveRun) out.push(['up', 'arrowUp', 'Move up  ⌥↑'], ['down', 'arrowDown', 'Move down  ⌥↓']);
-  if (e.nextRun && e.kind !== 'queue-current') out.push(['next', 'next', 'Play next  ⌘↵']);
-  if (e.queueRun && e.queueIdx === undefined) out.push(['queue', 'listPlus', 'Add to queue  ⇧↵']);
+  const now = isPlaying(e);
+  if (e.nextRun && !now) out.push(['next', 'next', 'Play next  ⌘↵']);
+  if (e.queueRun && e.queueIdx === undefined && !now) out.push(['queue', 'listPlus', 'Add to queue  ⇧↵']);
   if (e.altRun) out.push(['alt', 'radio', 'Start a radio  ⌥↵']);
   if (e.heartRun) out.push(['heart', e.liked ? 'heartFill' : 'heart', e.liked ? 'Unlike  ⌘-click' : 'Like  ⌘-click', e.liked]);
   if (e.removeRun) out.push(['remove', 'x', 'Remove  ⌘⌫']);
@@ -309,6 +337,7 @@ function renderKeys() {
   if (!e || e.inert) keys = back;
   else if (e.submenu) keys = [['↵', 'Open'], ['⇥', 'Open'], ...back];
   else if (e.kind === 'answer') keys = e.count ? [['↵', 'Play all'], ['⌘↵', 'Next'], ['⇧↵', 'Queue'], ['⌥↵', 'Try again']] : [['↵', 'Try again']];
+  else if (e.name !== undefined && isPlaying(e)) keys = [['⌥↵', 'Radio from it'], ['⌘D', 'Like'], ['⌘I', 'Info'], ...back];
   else if (e.moveRun) keys = [['↵', 'Play'], ['⌘↵', 'Next'], ['⌥↑↓', 'Move'], ['⌘⌫', 'Remove'], ['⌘I', 'Info'], ...back];
   else if (e.name !== undefined) keys = [['↵', 'Play'], ['⌘↵', 'Next'], ['⇧↵', 'Queue'], ['⌥↵', 'Radio'], ['⌘I', 'Info'], ...back];
   else keys = [['↵', 'Choose'], ...back];

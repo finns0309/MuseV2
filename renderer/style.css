@@ -887,6 +887,35 @@ body[data-theme="muse"] .cmdk-panel:not(.paused) .cmdk-mark {
 .cmdk-list .act:hover { background: var(--hover-bg-strong); color: var(--fg); }
 .cmdk-list .act.on { color: var(--accent); }
 
+/* ---- ♫ — the playing song's thumbnail carries three dancing bars ---- */
+.cmdk-list .tile.thumb { position: relative; }
+.cmdk-list .eq {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 2px;
+  padding-bottom: 7px;
+  background: rgba(0, 0, 0, 0.38);
+}
+.cmdk-list .eq i {
+  width: 3px;
+  height: 12px;
+  border-radius: 1.5px;
+  background: #fff;
+  transform-origin: bottom;
+  animation: eq 900ms ease-in-out infinite;
+}
+.cmdk-list .eq i:nth-child(2) { animation-duration: 700ms; animation-delay: -250ms; }
+.cmdk-list .eq i:nth-child(3) { animation-duration: 1100ms; animation-delay: -500ms; }
+.cmdk-panel.paused .cmdk-list .eq i { animation-play-state: paused; transform: scaleY(0.35); }
+@keyframes eq {
+  0%, 100% { transform: scaleY(0.3); }
+  50%      { transform: scaleY(1); }
+}
+.cmdk-list li.playing .nm { color: var(--accent); }
+
 /* ---- Ask ---- */
 /* The Ask row's tile is the spark itself. */
 .cmdk-list .tile.spark::before {

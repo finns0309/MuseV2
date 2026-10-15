@@ -181,6 +181,15 @@ function buildQueueEntries(filter) {
     if (shown < LIST_CAP) { out.push(queueEntry(queue[i], i, false, 'Up next')); shown++; } else hidden++;
   }
   if (hidden) out.push({ ...note(`${hidden} more up next`, 'type to filter'), group: 'Up next' });
+  // Single mode: nothing comes next by design — say so, and offer the way out.
+  const s = store.get().playbackSession;
+  if (!f && queue.length === 1 && s?.kind === 'mode' && s.modeId === 'single') {
+    out.push({
+      kind: 'note', icon: 'repeat1', group: 'Up next', submenu: 'mode',
+      title: 'Single — this one repeats', desc: 'pick another mode to move on',
+      run: () => ({ scope: 'mode' }),
+    });
+  }
   for (let i = queueIdx - 1, n = 0; i >= 0 && n < 10; i--) {
     if (!hit(queue[i])) continue;
     out.push(queueEntry(queue[i], i, false, 'Played'));
