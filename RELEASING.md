@@ -1,10 +1,13 @@
 # Releasing & maintaining MuseV2
 
-> MuseV2 has **no GitHub repo yet**. `build.publish` points at
-> `finns0309/MuseV2`, so `npm run release` fails until that repo exists —
-> by design, so a V2 build can never land on muse v1's releases page. The
-> v1 links below are kept for reference. `npm run build` (local install)
-> works today and produces `MuseV2.app`.
+> MuseV2 lives at **github.com/finns0309/MuseV2** (private). `build.publish`
+> points there, so a V2 release can never land on muse v1's releases page.
+> The v1 links below are kept for reference; read `muse` as `MuseV2`.
+> `npm run build` produces `MuseV2.app`, which installs next to `Muse.app`.
+>
+> Dev runs: `MUSEV2_SILENT=1 npm start` mutes the output (handy when an agent
+> drives the app over `--remote-debugging-port`). MuseV2 runs fine next to
+> Muse v1 — but both register ⌥Space, so expect both to answer it.
 
 Three separate workflows — don't mix them up:
 
