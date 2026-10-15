@@ -466,6 +466,11 @@ body[data-theme="claude"][data-scheme="light"] {
   transition: color 800ms ease;
   animation: chevron-breathe 3s ease-in-out infinite;
 }
+/* muse: the chevron's breath follows the music while it plays. */
+body[data-theme="muse"] .cmdk-panel:not(.paused) .cmdk-mark {
+  transform: translateX(calc(var(--level, 0) * 3px));
+  transition: transform 90ms linear, color 800ms ease;
+}
 @keyframes chevron-breathe {
   0%, 100% { opacity: 0.5; }
   50%      { opacity: 0.9; }
@@ -1326,6 +1331,11 @@ body[data-theme="claude"] .cmdk-mark::before {
   animation: spark 2.2s linear infinite;
 }
 body[data-theme="claude"] .cmdk-panel.paused .cmdk-mark::before { animation: none; opacity: 0.5; }
+/* …and breathes with the music: --level is the smoothed loudness (ambient.js). */
+body[data-theme="claude"] .cmdk-mark::before {
+  transform: scale(calc(1 + var(--level, 0) * 0.45)) rotate(calc(var(--level, 0) * 40deg));
+  transition: transform 90ms linear;
+}
 
 /* Headline in serif, everything else in the system face. */
 body[data-theme="claude"] .cmdk-now__title { font-size: 14px; font-weight: 400; letter-spacing: 0; }

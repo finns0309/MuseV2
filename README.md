@@ -55,6 +55,7 @@ Everything happens in the palette. Type to search; prefix with `/` for commands.
 | `/pl <id or url>` | load a NetEase playlist and remember it |
 | `/era` | your listening by month (plays, the song you played most) — `↵` plays that month's top 50. "↺ N months ago today" sits on top, and as a chip at home |
 | `/mode <q>` `/theme <q>` | pick a mode / theme — themes, accents and light/dark keep the menu open so you can flip through them |
+| `/appearance` | light / dark, and **Song in the menu bar** — the playing title beside the tray icon (`✻ 夜に駆ける` while it plays) |
 | `/accent #d8b35f` | pin an accent (presets: Clay, Vermilion, Lake, Moss, Plum); *Auto* follows the cover in muse, the theme's own ink elsewhere |
 
 | Key | Action |

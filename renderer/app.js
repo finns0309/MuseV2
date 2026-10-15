@@ -33,6 +33,7 @@ const els = {
         theme: isTheme(prefs.appearance?.theme) ? prefs.appearance.theme : DEFAULT_THEME,
         accent: /^#[0-9a-f]{6}$/i.test(prefs.appearance?.accent || '') ? prefs.appearance.accent.toLowerCase() : null,
         bg: null,
+        menuBar: prefs.appearance?.menuBar !== false,
       },
     });
   }

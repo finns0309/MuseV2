@@ -26,6 +26,7 @@ import * as composer from './ui/composer.js';
 import * as list from './ui/list.js';
 import * as toast from './ui/toast.js';
 import * as info from './ui/info.js';
+import * as ambient from './ui/ambient.js';
 import * as memory from './lib/memory.js';
 
 // ---- State ------------------------------------------------------------------
@@ -148,6 +149,7 @@ export function mount(el) {
     cursorChanged: (entry) => info.show(entry),
   });
   info.mountInfo(rootEl.querySelector('.cmdk-list-wrap'));
+  ambient.mountAmbient(panelEl);
   memory.prime();
 
   // Subsystems

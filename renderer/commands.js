@@ -241,14 +241,22 @@ function modeLeaves() {
 }
 
 function appearanceLeaves() {
-  const cur = store.get().appearance.scheme;
-  return ['light', 'dark'].map((scheme) => ({
-    kind: 'appearance',
-    icon: scheme === 'light' ? 'sun' : 'moon',
-    title: cap(scheme), desc: `quiet ${scheme} surface`,
-    checked: scheme === cur, keywords: ['appearance', 'scheme'],
-    run: () => { actions.setAppearanceScheme(scheme); return { ok: `appearance · ${scheme}` }; },
-  }));
+  const { scheme: cur, menuBar } = store.get().appearance;
+  return [
+    ...['light', 'dark'].map((scheme) => ({
+      kind: 'appearance',
+      icon: scheme === 'light' ? 'sun' : 'moon',
+      title: cap(scheme), desc: `quiet ${scheme} surface`,
+      checked: scheme === cur, keywords: ['appearance', 'scheme'],
+      run: () => { actions.setAppearanceScheme(scheme); return { ok: `appearance · ${scheme}` }; },
+    })),
+    {
+      kind: 'appearance', icon: 'menubar',
+      title: 'Song in the menu bar', desc: menuBar ? 'on — “✻ title” beside the icon' : 'off',
+      checked: menuBar, keywords: ['menu bar', 'menubar', 'tray', 'title'],
+      run: () => { actions.setMenuBar(!menuBar); return { ok: `menu bar · ${menuBar ? 'off' : 'on'}` }; },
+    },
+  ];
 }
 
 function themeLeaves() {
@@ -381,7 +389,7 @@ const SCOPES = [
   },
   {
     id: 'appearance', aliases: ['scheme'], title: 'Appearance', icon: 'contrast', group: LOOK,
-    row: () => ({ desc: 'light or dark', value: cap(store.get().appearance.scheme) }),
+    row: () => ({ desc: 'light, dark, the menu bar', value: cap(store.get().appearance.scheme) }),
     items: (f) => filterLeaves(appearanceLeaves(), f),
     leaves: appearanceLeaves,
   },

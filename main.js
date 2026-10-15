@@ -246,6 +246,13 @@ ipcMain.handle('set-window-bg', (_, color) => {
 ipcMain.handle('llm-available', () => llm.available());
 ipcMain.handle('llm-respond', (_, body) => llm.respond(body));
 
+// The playing song beside the menu-bar icon — the renderer decides the text
+// (and whether to show any; see renderer/ui/ambient.js).
+ipcMain.handle('tray-title', (_, text) => {
+  if (!tray || tray.isDestroyed?.()) return;
+  tray.setTitle(String(text || '').slice(0, 64), { fontType: 'monospacedDigit' });
+});
+
 ipcMain.handle('resize-window', (_, w, h) => {
   if (!win || win.isDestroyed()) return;
   const [curW, curH] = win.getSize();

@@ -99,6 +99,7 @@ export const store = new Store({
     theme: 'muse',                  // see ./themes.js
     accent: null,
     bg: null,                       // resolved panel bg (#rrggbb) — mirrored to the native window
+    menuBar: true,                  // the playing song's title beside the tray icon
   },
 });
 
@@ -127,6 +128,12 @@ export const actions = {
     if (typeof theme !== 'string' || !theme) throw new TypeError('setTheme: id must be non-empty string');
     if (store.get().appearance.theme === theme) return;
     store.set((s) => ({ ...s, appearance: { ...s.appearance, theme } }));
+  },
+
+  setMenuBar(on) {
+    const v = !!on;
+    if (store.get().appearance.menuBar === v) return;
+    store.set((s) => ({ ...s, appearance: { ...s.appearance, menuBar: v } }));
   },
 
   // null = auto (follow the album cover). A hex value pins the accent.

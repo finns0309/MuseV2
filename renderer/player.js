@@ -646,7 +646,13 @@ function sampleSpectrum() {
   }
   const rms = Math.sqrt(sumSq / Math.max(1, totalN)) / 255;
   window.muse.sendSpectrum({ t: Date.now(), bands, rms });
+  for (const fn of levelHandlers) fn(rms, bands);
 }
+
+// The same loudness, for the UI (the spark breathes with it). Called at the
+// spectrum rate while playing, and once with 0 when playback stops.
+const levelHandlers = new Set();
+export function onLevel(fn) { levelHandlers.add(fn); return () => levelHandlers.delete(fn); }
 
 function startSpectrumLoop() {
   if (spectrumTimer) return;
@@ -671,5 +677,5 @@ audio.addEventListener('play', () => {
   }
   startSpectrumLoop();
 });
-audio.addEventListener('pause', stopSpectrumLoop);
-audio.addEventListener('ended', stopSpectrumLoop);
+audio.addEventListener('pause', () => { stopSpectrumLoop(); for (const fn of levelHandlers) fn(0, null); });
+audio.addEventListener('ended', () => { stopSpectrumLoop(); for (const fn of levelHandlers) fn(0, null); });
