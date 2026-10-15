@@ -171,6 +171,12 @@ export function mount(el) {
   );
   // Why this queue exists — mode / manual / radio / playlist — always visible.
   store.select((s) => s.playbackSession?.label ?? '', (label) => { sessionEl.textContent = label; });
+  // A theme swap changes row metrics (type, padding) under a cursor that was
+  // measured for the old ones — re-seat it without the glide.
+  store.selectKey(
+    (s) => `${s.appearance.theme}|${s.appearance.scheme}`,
+    () => requestAnimationFrame(() => positionCursor(false))
+  );
 
   // Window appear (global hotkey). Focus synchronously — the first keystroke
   // after ⌥Space must never be lost — and start from a clean slate: a blur-hide

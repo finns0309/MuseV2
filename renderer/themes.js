@@ -3,11 +3,16 @@
 // every theme has both). Tokens live in style.css under
 // body[data-theme="<id>"]; this file only declares what exists so the
 // command surface can list and validate them.
+//
+// followCover: whether the accent tracks the album art (accent.js). muse is
+// the chameleon; paper and mono are materials with their own ink, so a blue
+// cover can't turn the vermilion stamp or the monochrome terminal blue.
+// A pinned /accent still wins either way.
 
 export const THEMES = [
-  { id: 'muse',  label: 'muse',  description: 'quiet, airy — the default' },
-  { id: 'paper', label: 'paper', description: 'warm cream & ink, serif titles' },
-  { id: 'mono',  label: 'mono',  description: 'terminal: monospace, hard edges' },
+  { id: 'muse',  label: 'muse',  description: 'quiet, airy — the default', followCover: true },
+  { id: 'paper', label: 'paper', description: 'printed matter: serif, vermilion ink', followCover: false },
+  { id: 'mono',  label: 'mono',  description: 'monochrome terminal', followCover: false },
 ];
 
 export const DEFAULT_THEME = 'muse';

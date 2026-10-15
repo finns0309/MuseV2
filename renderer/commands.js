@@ -16,7 +16,7 @@ import { toggleHeart } from './lib/library.js';
 import { api } from './api.js';
 import * as playlist from './playlist.js';
 import { GLYPH, prefix } from './glyphs.js';
-import { THEMES } from './themes.js';
+import { THEMES, byId as themeById } from './themes.js';
 
 // ---- Shared entry factories -------------------------------------------------
 
@@ -332,7 +332,7 @@ export const COMMAND_BUILDERS = [
       out.push({
         kind: 'appearance',
         label: 'appearance · accent auto',
-        hint: 'follow the album cover',
+        hint: themeById[store.get().appearance.theme]?.followCover === false ? 'back to the theme ink' : 'follow the album cover',
         run: () => { actions.setAccent(null); return { ok: 'accent · auto' }; },
       });
     } else if (accent) {

@@ -10,7 +10,7 @@ import { bootAuth } from './auth.js';
 import * as cmdk from './cmdk.js';
 import * as player from './player.js';
 import * as accent from './accent.js';
-import { isTheme, DEFAULT_THEME } from './themes.js';
+import { isTheme, DEFAULT_THEME, byId as themeById } from './themes.js';
 import { MODES, byId } from './modes/index.js';
 import { buildModeQueue, setModeSession } from './modes/session.js';
 import { bootLibrary, wirePlayTracking } from './lib/library.js';
@@ -134,8 +134,10 @@ function applyAppearance(appearance) {
   const theme = isTheme(appearance?.theme) ? appearance.theme : DEFAULT_THEME;
   document.body.dataset.scheme = scheme;
   document.body.dataset.theme = theme;
-  // accent.js owns --muse-accent: user override > clamped cover colour > token.
+  // accent.js owns --muse-accent: user override > clamped cover colour > token
+  // (the cover step only for themes that follow it, see themes.js).
   accent.setScheme(scheme);
+  accent.setFollowCover(themeById[theme].followCover);
   accent.setOverride(appearance?.accent || null);
   // Keep the native window backgroundColor in sync so the panel's fade/resize
   // never reveals a mismatched color behind it (the grey flash on summon).

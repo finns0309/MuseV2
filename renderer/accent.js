@@ -7,8 +7,9 @@
 // an eye-searing tint). Chroma gets a floor so grey covers still tint a little.
 //
 // Precedence for what actually lands in --muse-accent:
-//   user override (/accent #rrggbb)  >  clamped cover accent  >  scheme default
+//   user override (/accent #rrggbb)  >  clamped cover accent  >  theme token
 // The override is never clobbered by a track change; `/accent auto` clears it.
+// Themes that own their ink (followCover: false) skip the cover step.
 
 const accentCache = new Map();
 let lastAccentUrl = '';
@@ -16,11 +17,13 @@ let ambientEl = null;
 
 let scheme = 'dark';      // 'dark' | 'light'
 let override = null;      // '#rrggbb' or null (auto)
+let followCover = true;   // false: the theme's own token is the auto accent
 let lastCover = null;     // { vivid:[r,g,b], avg:[r,g,b] } for the current track
 
 export function init(el) { ambientEl = el; render(); }
 export function setScheme(s) { scheme = s === 'light' ? 'light' : 'dark'; render(); }
 export function setOverride(hex) { override = /^#[0-9a-f]{6}$/i.test(hex || '') ? hex.toLowerCase() : null; render(); }
+export function setFollowCover(on) { followCover = on !== false; render(); }
 
 export function update(coverUrl) {
   if (!coverUrl || coverUrl === lastAccentUrl) return;
@@ -66,7 +69,7 @@ export function update(coverUrl) {
 function render() {
   const body = document.body;
   if (!body) return;
-  const hex = override || (lastCover ? clampAccent(lastCover.vivid, scheme) : null);
+  const hex = override || (followCover && lastCover ? clampAccent(lastCover.vivid, scheme) : null);
   if (hex) body.style.setProperty('--muse-accent', hex);
   else body.style.removeProperty('--muse-accent');     // fall back to the CSS token
   if (ambientEl) {

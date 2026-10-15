@@ -84,86 +84,94 @@ body[data-scheme="light"] {
   --ambient-opacity: 0.20;
 }
 
-/* ---- Theme: paper — warm cream & ink, serif titles, softer corners ---- */
+/* ---- Theme: paper — printed matter: serif, vermilion ink, grain ----
+   Component rules live in §THEMES at the end of the file. */
 body[data-theme="paper"] {
-  --bg: #1d1a16;
-  --bg-raised: rgba(240, 232, 220, 0.06);
-  --fg: rgba(240, 232, 220, 0.92);
-  --fg-muted: rgba(240, 232, 220, 0.56);
-  --fg-dim: rgba(240, 232, 220, 0.32);
-  --line: rgba(240, 232, 220, 0.09);
-  --line-strong: rgba(240, 232, 220, 0.16);
-  --muse-accent: #e2a06a;
-  --hover-bg: rgba(240, 232, 220, 0.05);
-  --hover-bg-strong: rgba(240, 232, 220, 0.09);
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 10px;
-  --font-title: "New York", "Iowan Old Style", "Songti SC", Georgia, serif;
-  --ambient-opacity: 0.30;
+  --bg: #1c1a17;
+  --bg-raised: rgba(236, 228, 214, 0.06);
+  --fg: rgba(236, 228, 214, 0.92);
+  --fg-muted: rgba(236, 228, 214, 0.58);
+  --fg-dim: rgba(236, 228, 214, 0.34);
+  --line: rgba(236, 228, 214, 0.09);
+  --line-strong: rgba(236, 228, 214, 0.17);
+  --muse-accent: #e27d60;
+  --hover-bg: rgba(236, 228, 214, 0.04);
+  --hover-bg-strong: rgba(236, 228, 214, 0.06);
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 3px;
+  --font-serif: "Iowan Old Style", "Songti SC", "Hiragino Mincho ProN", AppleMyungjo, Palatino, Georgia, serif;
+  --font-display: var(--font-serif);
+  --font-body: var(--font-serif);
+  --font-title: var(--font-serif);
+  --font-mono: var(--font-serif);
+  --shadow-cover: 0 1px 2px rgba(0, 0, 0, 0.35), 0 4px 10px -4px rgba(0, 0, 0, 0.4);
+  --shadow-cover-idle:
+    0 1px 1px rgba(0, 0, 0, 0.3),
+    0 3px 6px rgba(0, 0, 0, 0.2),
+    0 16px 32px -12px rgba(0, 0, 0, 0.55);
+  --cursor-ring: inset 2px 0 0 var(--accent);
+  --ambient-opacity: 0;
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.93 0 0 0 0 0.89 0 0 0 0 0.82 3 0 0 0 -1.45'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23g)' opacity='0.05'/%3E%3C/svg%3E");
 }
 body[data-theme="paper"][data-scheme="light"] {
-  --bg: #f4efe4;
-  --bg-raised: rgba(38, 30, 22, 0.05);
-  --fg: rgba(38, 30, 22, 0.90);
-  --fg-muted: rgba(38, 30, 22, 0.58);
-  --fg-dim: rgba(38, 30, 22, 0.34);
-  --line: rgba(38, 30, 22, 0.09);
-  --line-strong: rgba(38, 30, 22, 0.16);
-  --muse-accent: #b4532a;
-  --hover-bg: rgba(38, 30, 22, 0.05);
-  --hover-bg-strong: rgba(38, 30, 22, 0.08);
-  --shadow-cover: 0 2px 10px -2px rgba(38, 30, 22, 0.25);
-  --ambient-opacity: 0.22;
+  --bg: #f2ede3;
+  --bg-raised: rgba(42, 36, 29, 0.05);
+  --fg: rgba(42, 36, 29, 0.94);
+  --fg-muted: rgba(42, 36, 29, 0.62);
+  --fg-dim: rgba(42, 36, 29, 0.38);
+  --line: rgba(42, 36, 29, 0.10);
+  --line-strong: rgba(42, 36, 29, 0.20);
+  --muse-accent: #b13b26;
+  --hover-bg: rgba(42, 36, 29, 0.035);
+  --hover-bg-strong: rgba(42, 36, 29, 0.05);
+  --shadow-cover: 0 1px 2px rgba(60, 44, 28, 0.22), 0 4px 10px -4px rgba(60, 44, 28, 0.25);
+  --shadow-cover-idle:
+    0 1px 1px rgba(60, 44, 28, 0.14),
+    0 3px 6px rgba(60, 44, 28, 0.08),
+    0 16px 32px -12px rgba(60, 44, 28, 0.32);
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.25 0 0 0 0 0.19 0 0 0 0 0.12 3 0 0 0 -1.45'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23g)' opacity='0.14'/%3E%3C/svg%3E");
 }
-body[data-theme="paper"] .cmdk-now__title { font-weight: 500; letter-spacing: 0; }
-body[data-theme="paper"] .cmdk-panel.idle .cmdk-now__title { font-size: 21px; letter-spacing: -0.2px; }
 
-/* ---- Theme: mono — terminal: one monospace face, hard edges, no glow ---- */
+/* ---- Theme: mono — monochrome terminal: one face, no radius, no glow.
+   The only colour on screen is the album cover (a pinned /accent adds one).
+   Component rules live in §THEMES at the end of the file. */
 body[data-theme="mono"] {
-  --bg: #0e0f10;
+  --bg: #0f0f0f;
   --bg-raised: rgba(255, 255, 255, 0.05);
-  --fg: #e6e6e6;
-  --fg-muted: rgba(230, 230, 230, 0.58);
-  --fg-dim: rgba(230, 230, 230, 0.34);
-  --line: rgba(255, 255, 255, 0.12);
+  --fg: #e7e7e4;
+  --fg-muted: rgba(231, 231, 228, 0.58);
+  --fg-dim: rgba(231, 231, 228, 0.32);
+  --line: rgba(255, 255, 255, 0.10);
   --line-strong: rgba(255, 255, 255, 0.22);
-  --muse-accent: #3ddc84;
+  --muse-accent: #e7e7e4;
   --hover-bg: rgba(255, 255, 255, 0.05);
   --hover-bg-strong: rgba(255, 255, 255, 0.09);
-  --radius-sm: 2px;
-  --radius-md: 2px;
-  --radius-lg: 2px;
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
   --font-body: var(--font-mono);
   --font-display: var(--font-mono);
   --font-title: var(--font-mono);
   --shadow-pop: none;
   --shadow-soft: none;
-  --shadow-cover: none;
-  --shadow-cover-idle: 0 0 0 1px var(--line-strong);
-  --cursor-ring: 0 0 0 1px var(--accent);
-  --ambient-opacity: 0.10;
+  --shadow-cover: 0 0 0 1px var(--line);
+  --shadow-cover-idle: 0 0 0 6px var(--bg), 0 0 0 7px var(--line-strong);
+  --cursor-ring: none;
+  --ambient-opacity: 0;
 }
 body[data-theme="mono"][data-scheme="light"] {
   --bg: #f6f6f4;
   --bg-raised: rgba(0, 0, 0, 0.04);
-  --fg: #141414;
-  --fg-muted: rgba(20, 20, 20, 0.60);
-  --fg-dim: rgba(20, 20, 20, 0.36);
-  --line: rgba(0, 0, 0, 0.12);
-  --line-strong: rgba(0, 0, 0, 0.22);
-  --muse-accent: #0b7a4b;
+  --fg: #151515;
+  --fg-muted: rgba(21, 21, 21, 0.60);
+  --fg-dim: rgba(21, 21, 21, 0.36);
+  --line: rgba(0, 0, 0, 0.10);
+  --line-strong: rgba(0, 0, 0, 0.24);
+  --muse-accent: #151515;
   --hover-bg: rgba(0, 0, 0, 0.04);
   --hover-bg-strong: rgba(0, 0, 0, 0.07);
-  --ambient-opacity: 0.08;
 }
-body[data-theme="mono"] .cmdk-mark { animation: none; opacity: 0.9; }
-body[data-theme="mono"] .cmdk-input { font-size: 15px; letter-spacing: 0; }
-body[data-theme="mono"] .cmdk-now__title { font-weight: 600; letter-spacing: 0; }
-body[data-theme="mono"] .cmdk-panel.idle .cmdk-now__title { font-size: 17px; letter-spacing: 0; }
-body[data-theme="mono"] .cmdk-cursor { background: var(--hover-bg); }
-body[data-theme="mono"] .cmdk-now__progress span::after { display: none; }
-body[data-theme="mono"] .cmdk-panel.idle .cmdk-now__cover { transform: none; }
 
 /* ======================================================================== */
 /*  §LOGIN                                                                   */
@@ -691,6 +699,160 @@ body[data-theme="mono"] .cmdk-panel.idle .cmdk-now__cover { transform: none; }
   .cmdk-mark { opacity: 0.7; }
   .cmdk-panel.idle .cmdk-now__cover { transform: none; }
 }
+
+/* ======================================================================== */
+/*  §THEMES — component rules for the non-default materials                  */
+/* ======================================================================== */
+/* Tokens alone can't carry a material: these are the places where paper and
+   mono *behave* differently, not just colour differently. Kept last so they
+   win over the base rules without !important. */
+
+/* ---- paper ---------------------------------------------------------------- */
+/* Grain sits on the opaque surfaces; the ambient wash is off (paper doesn't
+   glow), and the accent is the theme's own vermilion (themes.js). */
+body[data-theme="paper"] .cmdk-panel,
+body[data-theme="paper"] .login-pane { background: var(--grain), var(--bg); }
+
+/* Rules are printed, not drawn edge to edge: inset to the text column. */
+body[data-theme="paper"] .cmdk-now,
+body[data-theme="paper"] .cmdk-input-row {
+  border-color: transparent;
+  background: linear-gradient(var(--line-strong), var(--line-strong)) no-repeat 50% 100% / calc(100% - 40px) 1px;
+}
+body[data-theme="paper"] .cmdk-panel.idle .cmdk-now { background: none; }
+body[data-theme="paper"] .cmdk-panel.idle .cmdk-input-row { border-color: transparent; background-position: 50% 0; }
+
+body[data-theme="paper"] .cmdk-now__title { font-size: 14px; font-weight: 400; letter-spacing: 0; }
+body[data-theme="paper"] .cmdk-now__artist { font-style: italic; font-size: 12.5px; }
+body[data-theme="paper"] .cmdk-panel.idle .cmdk-now__title { font-size: 24px; line-height: 1.2; letter-spacing: -0.2px; }
+body[data-theme="paper"] .cmdk-panel.idle .cmdk-now__artist { font-size: 14px; margin-top: 3px; }
+body[data-theme="paper"] .cmdk-panel.idle .cmdk-now__progress-row { margin-top: 12px; }
+
+/* Hairline + a solid playhead dot — ink, not light. */
+body[data-theme="paper"] .cmdk-now__progress { height: 1px; overflow: visible; background: var(--line-strong); }
+body[data-theme="paper"] .cmdk-now__progress span { opacity: 1; }
+body[data-theme="paper"] .cmdk-now__progress span::after {
+  right: -2.5px; top: -2px;
+  width: 5px; height: 5px;
+  filter: none;
+  opacity: 1;
+}
+body[data-theme="paper"] .cmdk-panel.idle .cmdk-now__progress span::after { opacity: 1; }
+body[data-theme="paper"] .cmdk-now__time,
+body[data-theme="paper"] .cmdk-list li.song .meta .dur {
+  font-size: 12px;
+  letter-spacing: 0;
+  font-variant-numeric: oldstyle-nums tabular-nums;
+}
+body[data-theme="paper"] .cmdk-now__time { color: var(--fg-muted); }
+body[data-theme="paper"] .cmdk-panel.paused .cmdk-now__progress span { opacity: 0.45; }
+body[data-theme="paper"] .cmdk-panel.paused .cmdk-now__time::before { font-style: italic; }
+
+body[data-theme="paper"] .cmdk-mark { font-size: 15px; color: var(--accent); opacity: 0.9; animation: none; }
+body[data-theme="paper"] .cmdk-input { font-size: 17px; letter-spacing: 0; }
+body[data-theme="paper"] .cmdk-input::placeholder { font-style: italic; }
+body[data-theme="paper"] .cmdk-session,
+body[data-theme="paper"] .cmdk-toast { font-size: 12.5px; font-style: italic; letter-spacing: 0; }
+
+/* Section heads read like a contents page: small caps · dotted leader · count */
+body[data-theme="paper"] .cmdk-list li.cmdk-sec {
+  gap: 8px;
+  padding: 14px 12px 4px;
+  font-size: 12px;
+  text-transform: none;
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.08em;
+  color: var(--fg-muted);
+}
+body[data-theme="paper"] .cmdk-list li.cmdk-sec::after {
+  content: '';
+  order: 1;
+  flex: 1 1 auto;
+  border-bottom: 1px dotted var(--line-strong);
+  transform: translateY(-3px);
+}
+body[data-theme="paper"] .cmdk-list li.cmdk-sec .sec-cnt { order: 2; font-variant-numeric: oldstyle-nums; }
+
+body[data-theme="paper"] .cmdk-list li { font-size: 13.5px; }
+body[data-theme="paper"] .cmdk-list li.song .sub,
+body[data-theme="paper"] .cmdk-list .hint { font-style: italic; font-size: 12.5px; }
+body[data-theme="paper"] .cmdk-list li.song .gl { color: var(--accent); font-size: 11px; }
+body[data-theme="paper"] .cmdk-list li.song.dim .gl { color: var(--fg-dim); }
+
+/* Cursor: a bookmark ribbon on the left edge over a faint ink wash. */
+body[data-theme="paper"] .cmdk-cursor.commit {
+  background: color-mix(in srgb, var(--accent), transparent 88%);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+/* ---- mono ----------------------------------------------------------------- */
+/* Terminals don't ease: the cursor is an inverse-video bar that snaps. */
+body[data-theme="mono"] .cmdk-cursor {
+  background: var(--fg);
+  transition: opacity 80ms linear;
+}
+/* full-white inverse glares on a black field; take the edge off */
+body[data-theme="mono"][data-scheme="dark"] .cmdk-cursor { background: color-mix(in srgb, var(--fg) 86%, var(--bg)); }
+body[data-theme="mono"] .cmdk-cursor.commit { background: var(--fg-muted); }
+body[data-theme="mono"] .cmdk-list li.sel,
+body[data-theme="mono"] .cmdk-list li.sel .lbl,
+body[data-theme="mono"] .cmdk-list li.sel .nm,
+body[data-theme="mono"] .cmdk-list li.sel .gl { color: var(--bg); }
+body[data-theme="mono"] .cmdk-list li.sel .sub,
+body[data-theme="mono"] .cmdk-list li.sel .hint,
+body[data-theme="mono"] .cmdk-list li.sel .meta .dur { color: color-mix(in srgb, var(--bg), transparent 35%); }
+
+body[data-theme="mono"] .cmdk-list li { min-height: 34px; padding: 6px 12px; font-size: 12.5px; }
+body[data-theme="mono"] .cmdk-list li.song .sub,
+body[data-theme="mono"] .cmdk-list .hint,
+body[data-theme="mono"] .cmdk-list li.song .meta .dur { font-size: 11.5px; }
+/* Matches are underlined, not coloured — there is no second colour. Drawn
+   as a background so .nm's overflow clip can't swallow it. */
+body[data-theme="mono"] .cmdk-list li.song .nm mark {
+  color: inherit;
+  background: linear-gradient(currentColor, currentColor) no-repeat 0 100% / 100% 1px;
+}
+
+/* LIBRARY ─────────────────────────── 8 */
+body[data-theme="mono"] .cmdk-list li.cmdk-sec { align-items: center; gap: 10px; min-height: 0; padding: 14px 12px 6px; font-size: 11px; }
+body[data-theme="mono"] .cmdk-list li.cmdk-empty { min-height: 48px; }
+body[data-theme="mono"] .cmdk-list li.cmdk-sec::after {
+  content: '';
+  order: 1;
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--line);
+}
+body[data-theme="mono"] .cmdk-list li.cmdk-sec .sec-cnt { order: 2; }
+
+body[data-theme="mono"] .cmdk-mark { color: var(--fg); animation: none; opacity: 1; font-size: 15px; }
+body[data-theme="mono"] .cmdk-input { font-size: 14px; letter-spacing: 0; }
+body[data-theme="mono"] .cmdk-session::before { content: '['; color: var(--fg-dim); }
+body[data-theme="mono"] .cmdk-session::after  { content: ']'; color: var(--fg-dim); }
+
+body[data-theme="mono"] .cmdk-now__title { font-weight: 700; letter-spacing: 0; }
+body[data-theme="mono"] .cmdk-now__artist { font-size: 11.5px; }
+body[data-theme="mono"] .cmdk-panel.idle .cmdk-now { gap: 20px; }
+body[data-theme="mono"] .cmdk-panel.idle .cmdk-now__cover { transform: none; }
+body[data-theme="mono"] .cmdk-panel.idle .cmdk-now__title { font-size: 16px; letter-spacing: 0; }
+body[data-theme="mono"] .cmdk-panel.idle .cmdk-now__artist { font-size: 12px; margin-top: 4px; }
+body[data-theme="mono"] .cmdk-panel.idle .cmdk-now__progress-row { margin-top: 12px; }
+
+/* A segmented meter: ▮▮▮▮▮▯▯▯▯ */
+body[data-theme="mono"] .cmdk-now__progress {
+  height: 4px;
+  border-radius: 0;
+  background: repeating-linear-gradient(90deg, var(--line-strong) 0 3px, transparent 3px 5px);
+}
+body[data-theme="mono"] .cmdk-now__progress span {
+  border-radius: 0;
+  opacity: 1;
+  background: repeating-linear-gradient(90deg, var(--accent) 0 3px, transparent 3px 5px);
+}
+body[data-theme="mono"] .cmdk-panel.idle .cmdk-now__progress { height: 6px; }
+body[data-theme="mono"] .cmdk-now__progress span::after { display: none; }
+body[data-theme="mono"] .cmdk-panel.paused .cmdk-now__progress span { opacity: 0.4; }
+body[data-theme="mono"] .cmdk-panel.paused .cmdk-now__cover { opacity: 0.8; filter: grayscale(1); }
 
 /* ======================================================================== */
 /*  §SCROLLBAR                                                               */
