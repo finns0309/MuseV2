@@ -9,7 +9,9 @@ import { GLYPH } from '../glyphs.js';
 
 let listEl = null;
 let cursorEl = null;
+let keysEl = null;
 let onExecute = () => {};
+let inScope = () => false;
 
 let entries = [];
 let rowEls = [];          // selectable row <li>s, parallel to entries (excludes section headers)
@@ -17,10 +19,12 @@ let cursor = 0;
 let query = '';           // highlighted in titles
 let introPending = false; // the first render after opening staggers its rows in
 
-export function mountList({ list, cursor: cur, execute }) {
+export function mountList({ list, cursor: cur, keys, execute, scoped }) {
   listEl = list;
   cursorEl = cur;
+  keysEl = keys;
   onExecute = execute;
+  inScope = scoped || inScope;
   listEl.addEventListener('scroll', () => seat(true), { passive: true });
 }
 
@@ -46,6 +50,7 @@ export function render(next, { query: q = '', thinking = false, emptyText = '', 
       listEl.appendChild(li);
     }
     seat(false);
+    renderKeys();
     return;
   }
   const intro = introPending;
@@ -78,7 +83,7 @@ export function render(next, { query: q = '', thinking = false, emptyText = '', 
     li.className = 'row' + (i === cursor ? ' sel' : '');
     if (intro) { li.classList.add('in'); li.style.animationDelay = `${Math.min(i, 10) * 24}ms`; }
 
-    if (e.name !== undefined) songRow(li, e, mixed[e.group] ?? false);
+    if (e.name !== undefined) songRow(li, e, mixed[e.group] ?? false, i);
     else menuRow(li, e);
 
     li.addEventListener('click', (ev) => onExecute(i, pickVariant(ev)));
@@ -88,6 +93,7 @@ export function render(next, { query: q = '', thinking = false, emptyText = '', 
   });
   if (thinking) listEl.appendChild(thinkingRow());
   seat(false);
+  renderKeys();
 }
 
 // ⌘-click likes, ⌥-click starts a radio; keyboard variants live in cmdk.onKey.
@@ -99,9 +105,9 @@ function pickVariant(ev) {
 
 // ---- Rows --------------------------------------------------------------------
 
-// Song: cover · name ♥ artist ……… duration — or, on the selected row, the
-// keys that act on it (Enter plays, ⌥Enter starts a radio).
-function songRow(li, e, showLiked) {
+// Song: cover · name ♥ artist ……… duration — or, on the selected / hovered
+// row, its actions as buttons (the key legend below says the same in keys).
+function songRow(li, e, showLiked, i) {
   li.classList.add('song');
   if (e.dim) li.classList.add('dim');
   const th = document.createElement('span'); th.className = 'tile thumb';
@@ -124,12 +130,33 @@ function songRow(li, e, showLiked) {
   const meta = document.createElement('span'); meta.className = 'meta';
   const dur = document.createElement('span'); dur.className = 'dur'; dur.textContent = e.dur || '';
   meta.append(dur);
-  if (e.altRun) {
-    const keys = document.createElement('span'); keys.className = 'keys';
-    keys.innerHTML = '<kbd>↵</kbd> Play<span class="sep"></span><kbd>⌥↵</kbd> Radio';
-    meta.append(keys);
+  const acts = rowActions(e);
+  if (acts.length) {
+    const box = document.createElement('span'); box.className = 'acts';
+    for (const [variant, ic, label, on] of acts) {
+      const b = document.createElement('button');
+      b.className = 'act' + (on ? ' on' : '');
+      b.title = label; b.setAttribute('aria-label', label);
+      b.innerHTML = icon(ic);
+      b.addEventListener('mousedown', (ev) => ev.preventDefault());   // keep the input focused
+      b.addEventListener('click', (ev) => { ev.stopPropagation(); onExecute(i, variant); });
+      box.append(b);
+    }
+    meta.append(box);
   }
   li.append(th, main, meta);
+}
+
+// [variant, icon, tooltip, active?] for a song row's buttons.
+function rowActions(e) {
+  const out = [];
+  if (e.moveRun) out.push(['up', 'arrowUp', 'Move up  ⌥↑'], ['down', 'arrowDown', 'Move down  ⌥↓']);
+  if (e.nextRun && e.kind !== 'queue-current') out.push(['next', 'next', 'Play next  ⌘↵']);
+  if (e.queueRun && e.queueIdx === undefined) out.push(['queue', 'listPlus', 'Add to queue  ⇧↵']);
+  if (e.altRun) out.push(['alt', 'radio', 'Start a radio  ⌥↵']);
+  if (e.heartRun) out.push(['heart', e.liked ? 'heartFill' : 'heart', e.liked ? 'Unlike  ⌘-click' : 'Like  ⌘-click', e.liked]);
+  if (e.removeRun) out.push(['remove', 'x', 'Remove  ⌘⌫']);
+  return out;
 }
 
 // Menu: tile (icon or colour swatch) · title  description ……… value ✓ ›
@@ -191,6 +218,24 @@ export function setCursor(i) {
   const next = rowEls[cursor];
   if (next) { next.classList.add('sel'); next.scrollIntoView({ block: 'nearest' }); }
   seat(true);
+  renderKeys();
+}
+
+// ---- Key legend ----------------------------------------------------------------
+// One slim line under the list saying what the keys do *for the selected row*
+// — the only place ⌘↵ / ⇧↵ / ⌥↑↓ are written down.
+
+function renderKeys() {
+  if (!keysEl) return;
+  const e = entries[cursor];
+  const back = inScope() ? [['⌫', 'Back']] : [];
+  let keys = [];
+  if (!e || e.inert) keys = back;
+  else if (e.submenu) keys = [['↵', 'Open'], ['⇥', 'Open'], ...back];
+  else if (e.moveRun) keys = [['↵', 'Play'], ['⌘↵', 'Next'], ['⌥↑↓', 'Move'], ['⌘⌫', 'Remove'], ...back];
+  else if (e.name !== undefined) keys = [['↵', 'Play'], ['⌘↵', 'Next'], ['⇧↵', 'Queue'], ['⌥↵', 'Radio'], ...back];
+  else keys = [['↵', 'Choose'], ...back];
+  keysEl.innerHTML = keys.map(([k, label]) => `<span><kbd>${k}</kbd>${label}</span>`).join('');
 }
 
 export function move(delta) {

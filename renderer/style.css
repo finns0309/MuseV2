@@ -764,11 +764,41 @@ body[data-theme="claude"][data-scheme="light"] {
 .cmdk-list .meta .chk svg { width: 15px; height: 15px; }
 .cmdk-list .meta .chev { color: var(--fg-dim); }
 .cmdk-list .meta .chev svg { width: 14px; height: 14px; }
-/* The selected song says what its keys do instead of how long it is. */
-.cmdk-list .meta .keys { display: none; align-items: center; gap: 5px; font-size: 11.5px; color: var(--fg-muted); }
-.cmdk-list .meta .keys .sep { width: 6px; }
-.cmdk-list li.sel .meta .keys { display: inline-flex; }
-.cmdk-list li.sel .meta:has(.keys) .dur { display: none; }
+/* The selected song shows its actions as buttons instead of its length. */
+.cmdk-list .meta .acts { display: none; align-items: center; gap: 2px; margin-right: -4px; }
+.cmdk-list li.sel .meta .acts { display: inline-flex; }
+.cmdk-list li.sel .meta:has(.acts) .dur { display: none; }
+.cmdk-list .act {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: calc(var(--radius-sm) * 0.6);
+  color: var(--fg-muted);
+  transition: background 120ms ease, color 120ms ease;
+}
+.cmdk-list .act svg { width: 15px; height: 15px; }
+.cmdk-list .act:hover { background: var(--hover-bg-strong); color: var(--fg); }
+.cmdk-list .act.on { color: var(--accent); }
+
+/* ---- Key legend — what the keys do for the selected row (search only) ---- */
+.cmdk-keys {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  display: flex;
+  gap: 16px;
+  padding: 7px 20px 9px;
+  border-top: 1px solid var(--line);
+  font-size: 11.5px;
+  color: var(--fg-dim);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.cmdk-keys:empty,
+.cmdk-panel.idle .cmdk-keys { display: none; }
+.cmdk-keys span { display: inline-flex; align-items: center; gap: 6px; }
+.cmdk-keys kbd,
 .cmdk-list kbd {
   display: inline-block;
   min-width: 18px;
@@ -1076,6 +1106,8 @@ body[data-theme="mono"] .cmdk-list li.sel .meta .dur,
 body[data-theme="mono"] .cmdk-list li.sel .meta .val,
 body[data-theme="mono"] .cmdk-list li.sel .meta .keys { color: color-mix(in srgb, var(--bg), transparent 35%); }
 body[data-theme="mono"] .cmdk-list li.sel kbd { color: inherit; border-color: currentColor; background: none; }
+body[data-theme="mono"] .cmdk-list li.sel .act { color: color-mix(in srgb, var(--bg), transparent 25%); }
+body[data-theme="mono"] .cmdk-list li.sel .act:hover { color: var(--bg); background: color-mix(in srgb, var(--bg), transparent 85%); }
 body[data-theme="mono"] .cmdk-list li.sel .tile { background: color-mix(in srgb, var(--bg), transparent 85%); }
 body[data-theme="mono"] .cmdk-list .liked,
 body[data-theme="mono"] .cmdk-list .meta .chk { color: var(--fg); }

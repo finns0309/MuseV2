@@ -62,7 +62,9 @@ Everything happens in the palette. Type to search; prefix with `/` for commands.
 | `⌘←` / `⌘→` | previous / next |
 | `⌘P` / `Space` | play-pause |
 | `Enter` | run the selection |
-| `⌥Enter` | alternate action (usually: start a radio from this song) |
+| `⌥Enter` | start a radio from this song |
+| `⌘Enter` / `⇧Enter` | play this song next / add it to the end of the queue — without interrupting what's playing |
+| `⌥↑` `⌥↓` · `⌘⌫` | in `/queue`: move the selected song · remove it (with an empty input) |
 | `⌘D` | like / unlike what's playing (`⌘`-click a row to like that song) |
 | `Esc` | clear the input, then hide the window |
 

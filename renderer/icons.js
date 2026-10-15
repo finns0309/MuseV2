@@ -27,6 +27,12 @@ const P = {
   check:    '<path d="M20 6 9 17l-5-5"/>',
   chevron:  '<path d="m9 18 6-6-6-6"/>',
   music:    '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+  next:     '<path d="m15 10 5 5-5 5"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/>',
+  listPlus: '<path d="M11 12H3M16 6H3M16 18H3M18 9v6M21 12h-6"/>',
+  heartFill:'<path d="M19 14c1.5-1.5 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.8 0-3 .5-4.5 2-1.5-1.5-2.7-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4 3 5.5l7 7Z" fill="currentColor"/>',
+  arrowUp:  '<path d="m5 12 7-7 7 7M12 19V5"/>',
+  arrowDown:'<path d="M12 5v14M19 12l-7 7-7-7"/>',
+  x:        '<path d="M18 6 6 18M6 6l12 12"/>',
 };
 
 export function icon(name) {

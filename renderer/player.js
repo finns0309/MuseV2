@@ -319,6 +319,62 @@ export function playAt(idx) {
   playFromQueue(queue, idx, 1, { allowLoop: false }).catch(swallowExpected);
 }
 
+// ---- Queue editing ---------------------------------------------------------
+// The queue is store.player.queue with queueIdx pointing at what's playing.
+// Edits never touch the current track or interrupt playback; they reshape
+// what comes after it (and, for remove/move, what came before). A track that
+// is already queued later is moved rather than duplicated.
+
+function withoutLater(queue, idx, id) {
+  return queue.filter((t, i) => i <= idx || t.id !== id);
+}
+
+// Put `track` right after the current one. Nothing playing → just play it.
+export function playNext(track) {
+  const { queue, queueIdx, track: cur } = store.get().player;
+  if (!cur || !queue.length) { playTrack(track).catch(swallowExpected); return 'playing'; }
+  if (cur.id === track.id) return 'current';
+  const q = withoutLater(queue, queueIdx, track.id);
+  q.splice(queueIdx + 1, 0, track);
+  store.set((s) => ({ ...s, player: { ...s.player, queue: q } }));
+  return 'next';
+}
+
+// Append `track` to the end of the queue. Nothing playing → just play it.
+export function enqueue(track) {
+  const { queue, queueIdx, track: cur } = store.get().player;
+  if (!cur || !queue.length) { playTrack(track).catch(swallowExpected); return 'playing'; }
+  if (cur.id === track.id) return 'current';
+  const q = withoutLater(queue, queueIdx, track.id);
+  q.push(track);
+  store.set((s) => ({ ...s, player: { ...s.player, queue: q } }));
+  return 'queued';
+}
+
+// Drop queue[idx]. The current track can't be removed (skip it instead).
+export function removeAt(idx) {
+  const { queue, queueIdx } = store.get().player;
+  if (idx < 0 || idx >= queue.length || idx === queueIdx) return false;
+  const q = queue.slice();
+  q.splice(idx, 1);
+  const nextIdx = idx < queueIdx ? queueIdx - 1 : queueIdx;
+  store.set((s) => ({ ...s, player: { ...s.player, queue: q, queueIdx: nextIdx } }));
+  return true;
+}
+
+// Swap queue[idx] with its neighbour in `delta` direction (±1), staying on
+// the same side of the current track. Returns the new index, or -1.
+export function moveBy(idx, delta) {
+  const { queue, queueIdx } = store.get().player;
+  const to = idx + delta;
+  if (idx === queueIdx || to === queueIdx || to < 0 || to >= queue.length) return -1;
+  if ((idx > queueIdx) !== (to > queueIdx)) return -1;
+  const q = queue.slice();
+  [q[idx], q[to]] = [q[to], q[idx]];
+  store.set((s) => ({ ...s, player: { ...s.player, queue: q } }));
+  return to;
+}
+
 async function playNextFromSession(queue) {
   const extra = await extendQueueForCurrentSession();
   if (extra.length) {

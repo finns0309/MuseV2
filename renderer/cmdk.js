@@ -107,6 +107,7 @@ export function mount(el) {
       <div class="cmdk-list-wrap">
         <ul class="cmdk-list"></ul>
       </div>
+      <div class="cmdk-keys" data-role="keys" aria-hidden="true"></div>
       <div class="cmdk-toast" role="status"></div>
     </div>`;
 
@@ -127,7 +128,13 @@ export function mount(el) {
     runSelected: () => execute(list.getCursor(), 'primary'),
     toggleLike: toggleCurrent,
   });
-  list.mountList({ list: rootEl.querySelector('.cmdk-list'), cursor: cursorEl, execute });
+  list.mountList({
+    list: rootEl.querySelector('.cmdk-list'),
+    cursor: cursorEl,
+    keys: rootEl.querySelector('[data-role=keys]'),
+    execute,
+    scoped: () => !!composer.getScope(),
+  });
 
   // Subsystems
   accent.init(rootEl.querySelector('[data-role=ambient]'));
@@ -302,11 +309,24 @@ function onKey(e) {
   // Keys consumed by the IME (candidate navigation, the confirming Enter)
   // arrive with isComposing / keyCode 229 — never treat those as ours.
   if (e.isComposing || e.keyCode === 229) return;
+  const sel = list.current();
+  // Queue editing on the selected row comes first — these chords would
+  // otherwise read as plain ↑↓ / the chip's Backspace. ⌥↑/⌥↓ move it, ⌘⌫
+  // removes it (only with an empty input — otherwise ⌘⌫ deletes text).
+  if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && sel?.moveRun) {
+    execute(list.getCursor(), e.key === 'ArrowUp' ? 'up' : 'down');
+    e.preventDefault();
+    return;
+  }
+  if (e.metaKey && e.key === 'Backspace' && !inputEl.value && sel?.removeRun) {
+    execute(list.getCursor(), 'remove');
+    e.preventDefault();
+    return;
+  }
   if (e.key === 'ArrowDown') { list.move(1); e.preventDefault(); return; }
   if (e.key === 'ArrowUp')   { list.move(-1); e.preventDefault(); return; }
   // Into a submenu: Tab, or → when the caret is already at the end.
   const atEnd = inputEl.selectionStart === inputEl.value.length && inputEl.selectionEnd === inputEl.value.length;
-  const sel = list.current();
   if (sel?.submenu && (e.key === 'Tab' || (e.key === 'ArrowRight' && atEnd))) {
     composer.enterScope(sel.submenu);
     e.preventDefault();
@@ -324,26 +344,37 @@ function onKey(e) {
     e.preventDefault();
     return;
   }
+  // ↵ play · ⌥↵ radio · ⌘↵ play next · ⇧↵ add to queue.
   // ⌘D is handled globally (document keydown → toggleCurrent); don't also
   // act on the highlighted row here, or it'd double-fire.
   if (e.key === 'Enter') {
-    const variant = (e.altKey || e.metaKey || e.shiftKey) ? 'alt' : 'primary';
+    const variant = e.altKey ? 'alt' : e.metaKey ? 'next' : e.shiftKey ? 'queue' : 'primary';
     execute(list.getCursor(), variant);
     e.preventDefault();
   }
 }
 
+// Variants: primary (↵) · alt (⌥↵, radio) · next (⌘↵) · queue (⇧↵) · heart
+// (⌘-click) · remove (⌘⌫) · up / down (⌥↑↓). An entry without the matching
+// handler falls back to its primary run (a menu row doesn't care about ⌘).
+const VARIANT_RUN = {
+  alt: (e) => e.altRun, next: (e) => e.nextRun, queue: (e) => e.queueRun,
+  heart: (e) => e.heartRun, remove: (e) => e.removeRun,
+  up: (e) => e.moveRun && (() => e.moveRun(-1)),
+  down: (e) => e.moveRun && (() => e.moveRun(1)),
+};
+
 function execute(i, variant = 'primary') {
   const entry = list.getEntries()[i]; if (!entry) return;
-  const handler =
-    variant === 'heart' && entry.heartRun ? entry.heartRun :
-    variant === 'alt'   && entry.altRun   ? entry.altRun   :
-    entry.run;
+  const special = VARIANT_RUN[variant]?.(entry);
+  if (!special && variant !== 'primary' && variant !== 'next' && variant !== 'queue') return;
+  const handler = special || entry.run;
   // Entries flagged `home` land on the keypress itself. Their handlers may
   // spend seconds on the network (mode rebuilds, similar-track fetches, the
   // stream URL) — the store's now-playing catches up and the hero pops when
   // it does. Handlers may also *return* { home } once they know the outcome.
-  const landedEarly = !!entry.home && variant !== 'heart';
+  // Queue edits and likes never land: you're still choosing.
+  const landedEarly = !!entry.home && (handler === entry.run || variant === 'alt');
   if (landedEarly) land();
   Promise.resolve()
     .then(() => handler())
@@ -353,10 +384,12 @@ function execute(i, variant = 'primary') {
       if (res?.warn) toast.show(res.warn, 'warn');
       if (res?.home && !landedEarly) land();
       else if (res?.close && !landedEarly) actions.closeCmdk();
-      else if (variant === 'heart') refresh({ keepCursor: true });
-      // A menu choice (theme, accent, light/dark) keeps the menu open and
-      // re-renders so the ✓ moves — flipping through themes is one key each.
-      else if (!landedEarly) refresh({ keepCursor: true });
+      // A menu choice (theme, accent, light/dark), a like or a queue edit
+      // keeps the list open and re-renders it so the ✓ / ♥ / order updates.
+      else if (!landedEarly) {
+        refresh({ keepCursor: true });
+        if (res?.cursorDelta) list.move(res.cursorDelta);
+      }
     })
     .catch((err) => { console.warn('cmdk run', err); toast.show(err?.message || String(err), 'error'); });
 }

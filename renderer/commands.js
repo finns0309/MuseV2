@@ -52,7 +52,16 @@ function sharedActions(track) {
       ok: r.isHearted ? `liked · ${track.name}` : `unliked · ${track.name}`,
     })),
     heartLabel: isHearted ? 'unlike' : 'like',
+    // ⌘↵ / ⇧↵ — reshape what comes next without touching what's playing.
+    nextRun: () => queueResult(player.playNext(track), track, 'plays next'),
+    queueRun: () => queueResult(player.enqueue(track), track, 'added to the queue'),
   };
+}
+
+function queueResult(outcome, track, said) {
+  if (outcome === 'current') return { warn: 'that’s the one playing' };
+  if (outcome === 'playing') return { home: true };
+  return { ok: `${track.name} · ${said}` };
 }
 
 // Structured song row: cover thumbnail + name (+ ♥ if liked) + artist (sub) +
@@ -97,10 +106,14 @@ function queueEntry(track, idx, isCurrent, group) {
   return {
     ...songEntry(track, { group }),
     kind: isCurrent ? 'queue-current' : 'queue-item',
+    queueIdx: idx,
     run: () => {
       if (!isCurrent) player.playAt(idx);
       return { home: true };
     },
+    // ⌘⌫ / ⌥↑↓ inside /queue. The current track stays put.
+    removeRun: isCurrent ? null : () => (player.removeAt(idx) ? {} : { warn: 'can’t remove that one' }),
+    moveRun: isCurrent ? null : (delta) => (player.moveBy(idx, delta) >= 0 ? { cursorDelta: delta } : {}),
   };
 }
 
