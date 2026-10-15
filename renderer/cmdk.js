@@ -149,7 +149,7 @@ export function mount(el) {
   toast.mountToast(rootEl.querySelector('.cmdk-toast'));
   hero.mountHero(rootEl);
   composer.mountComposer(rootEl, {
-    refresh: () => refresh(),
+    refresh: (opts) => refresh(opts),
     runSelected: () => execute(list.getCursor(), 'primary'),
     toggleLike: toggleCurrent,
   });
@@ -249,7 +249,9 @@ export function openWith(prefill) { pendingOpenInput = String(prefill || ''); ac
 
 let searchCtrl = null;
 
-function refresh({ keepCursor = false } = {}) {
+// motion: 'forward' (into a submenu) / 'back' (out of one) — the list
+// slides in from that side so the hierarchy reads without thinking.
+function refresh({ keepCursor = false, motion = null } = {}) {
   // `/theme ` — typed, pasted, or set by a button — becomes a chip + filter.
   if (!composer.getScope()) {
     const m = inputEl.value.match(/^\s*\/(\S+)\s([\s\S]*)$/);
@@ -288,7 +290,7 @@ function refresh({ keepCursor = false } = {}) {
   }
 
   const view = { query: q, emptyText: raw ? 'No matches' : '' };
-  list.render(entries, { ...view, thinking: !isCmd && !isAsk && !!q, keepCursor });
+  list.render(entries, { ...view, thinking: !isCmd && !isAsk && !!q, keepCursor, motion });
   composer.renderSend();
 
   setIdle(!raw && !scope);
@@ -453,7 +455,7 @@ function onKey(e) {
     composer.setScope(null);
     inputEl.value = '/' + rest;
     inputEl.setSelectionRange(1, 1);
-    refresh();
+    refresh({ motion: 'back' });
     e.preventDefault();
     return;
   }

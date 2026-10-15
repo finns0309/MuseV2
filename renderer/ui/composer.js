@@ -120,7 +120,7 @@ export function enterScope(id) {
   setScope(sc);
   inputEl.value = '';
   inputEl.focus();
-  handlers.refresh();
+  handlers.refresh({ motion: 'forward' });
 }
 
 export function setValue(v) {

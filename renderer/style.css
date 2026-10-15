@@ -1237,6 +1237,16 @@ body[data-theme="muse"] .cmdk-panel:not(.paused) .cmdk-mark {
 }
 .cmdk-list li.in { animation: cmdk-row-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
 
+/* Into a submenu the rows arrive from the right; out of one, from the left.
+   The wrapper moves, so the cursor box rides along with its row. */
+.cmdk-panel:not(.idle) .cmdk-list-wrap.go-forward { animation: list-forward 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.cmdk-panel:not(.idle) .cmdk-list-wrap.go-back    { animation: list-back 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes list-forward { from { opacity: 0; transform: translateX(18px); } to { opacity: 1; transform: none; } }
+@keyframes list-back    { from { opacity: 0; transform: translateX(-18px); } to { opacity: 1; transform: none; } }
+/* The chip pops into the text line as you enter. */
+.cmdk-scope:not([hidden]) { animation: chip-in 300ms cubic-bezier(0.25, 1.45, 0.4, 1) both; }
+@keyframes chip-in { from { opacity: 0; transform: scale(0.7); } to { opacity: 1; transform: none; } }
+
 /* List reveal (idle → search) — rises under the strip while the cover
    travels into it; same 200ms, one movement. */
 .cmdk-panel:not(.idle) .cmdk-list-wrap {

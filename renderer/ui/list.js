@@ -65,7 +65,17 @@ export function armIntro() { introPending = true; }
 // re-rendering its ✓, cloud results arriving under a moved cursor).
 // thinking: true (cloud search) or the status line to show ("Picking songs…").
 // prompt: the request echoed as a speech bubble above everything (Ask).
-export function render(next, { query: q = '', thinking = false, emptyText = '', keepCursor = false, prompt = '' } = {}) {
+export function render(next, { query: q = '', thinking = false, emptyText = '', keepCursor = false, prompt = '', motion = null } = {}) {
+  if (motion) {
+    // Slide the wrapper (rows + cursor box together), then let it go so the
+    // idle → search reveal can play on it again later.
+    const wrap = listEl.parentElement;
+    wrap.classList.remove('go-forward', 'go-back');
+    void wrap.offsetWidth;
+    wrap.classList.add(motion === 'back' ? 'go-back' : 'go-forward');
+    clearTimeout(wrap._slideDone);
+    wrap._slideDone = setTimeout(() => wrap.classList.remove('go-forward', 'go-back'), 400);
+  }
   entries = next;
   query = q;
   cursor = keepCursor ? Math.min(cursor, Math.max(0, entries.length - 1)) : 0;
