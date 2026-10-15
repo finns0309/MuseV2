@@ -6,9 +6,11 @@
 > history up to v0.1.6 and nothing after.
 >
 > Runs as a separate app (**MuseV2**, `com.finn.musev2`, data in
-> `~/Library/Application Support/MuseV2`) but on the **same ports**
-> (10754 NCM API, 10755 `/now` for echo) — so only one of Muse / MuseV2 can
-> run at a time.
+> `~/Library/Application Support/MuseV2`) with its own NCM API port (10764),
+> so it can run next to Muse v1. `/now` + `/spectrum` (for echo) take 10755
+> when it's free and fall back to 10765 when v1 already holds it — echo
+> follows whichever app started first. The global shortcuts go to the first
+> app too; the other is still a click away in the menu bar.
 
 A summon-anywhere command palette for NetEase Cloud Music. Hit
 **⌥Space**, change what's playing, and it's gone again. No dock icon, no

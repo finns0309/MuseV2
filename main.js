@@ -13,18 +13,30 @@ const llm = require('./lib/llm').create(path.join(app.getPath('userData'), 'llm.
 // identity leaks into visible surfaces.
 app.setName('MuseV2');   // also picks the userData dir: ~/Library/Application Support/MuseV2
 
+// One MuseV2 at a time — keyed on MuseV2's own userData, so Muse v1 running
+// alongside is fine. A second launch just summons the first.
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) app.quit();
+app.on('second-instance', () => showCommandSurface());
+
 const ICON_PATH = path.join(__dirname, 'assets', 'icon.png');
 const TRAY_PATH = path.join(__dirname, 'assets', 'trayTemplate.png');
 
 let tray = null;  // menu-bar entry (the only visible UI when dock is hidden)
 
 // Local NCM API (the reverse-engineered HTTP wrapper YesPlayMusic also uses).
-const NCM_PORT = 10754;
+// MuseV2 has its own (v1 uses 10754), so the two can run side by side.
+// preload.js mirrors this in ncmBase — change both together.
+const NCM_PORT = 10764;
 // Tiny side server that exposes the renderer's current playback state so
 // echo (or anything else) can poll it instead of nowplaying-cli.
 // Wire format is defined in ./NOW_PLAYING.md — any field change must land
 // there + in echo in the same commit.
-const NOW_PORT = 10755;
+// /now + /spectrum for echo. echo reads 10755, so MuseV2 takes it when it's
+// free; if Muse v1 already holds it, MuseV2 serves on 10765 instead and echo
+// keeps following v1. Whichever app starts first is the one echo shows.
+const NOW_PORTS = [10755, 10765];
+let NOW_PORT = NOW_PORTS[0];
 
 const COOKIE_PATH = path.join(app.getPath('userData'), 'cookie.txt');
 let store;     // initialized in app.whenReady (needs userData path)
@@ -81,7 +93,15 @@ const SPECTRUM_FMAX_HZ = 12000;
 // muse won't accumulate stale events either.
 const HISTORY_MAX_AGE_MS = 365 * 24 * 60 * 60 * 1000;
 
-function startNowServer() {
+async function startNowServer() {
+  for (let i = 0; i < NOW_PORTS.length; i++) {
+    try { await listenNow(NOW_PORTS[i]); return; }
+    catch (e) { if (e.code !== 'EADDRINUSE' || i === NOW_PORTS.length - 1) throw e; }
+  }
+}
+
+function listenNow(port) {
+  NOW_PORT = port;
   return new Promise((resolve, reject) => {
     nowServer = http.createServer((req, res) => {
       if (req.url !== '/now') { res.writeHead(404).end(); return; }
@@ -109,7 +129,7 @@ function startNowServer() {
         } catch {}
       });
     });
-    nowServer.on('error', reject);
+    nowServer.once('error', reject);
     nowServer.listen(NOW_PORT, '127.0.0.1', () => {
       console.log(`[muse] /now on http://127.0.0.1:${NOW_PORT}/now`);
       console.log(`[muse] /spectrum on ws://127.0.0.1:${NOW_PORT}/spectrum`);
@@ -293,6 +313,9 @@ function createWindow() {
     },
   });
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  // Dev/test runs (an agent driving the app over CDP, say): MUSEV2_SILENT=1
+  // keeps everything working but mutes the output.
+  if (process.env.MUSEV2_SILENT) win.webContents.setAudioMuted(true);
 
   // Closing the window (red traffic light, ⌘W) hides it instead of destroying
   // it — playback + state live in the renderer, so we keep it alive in the
@@ -330,19 +353,6 @@ function registerShortcuts() {
   }
 }
 
-// If another muse is already running we'll find its /now endpoint responding.
-// Distinguish this from "random other thing on port 10755" so the user gets a
-// friendly "already running" message instead of a scary startup failure.
-async function detectExistingMuse() {
-  try {
-    const r = await fetch(`http://127.0.0.1:${NOW_PORT}/now`, { signal: AbortSignal.timeout(400) });
-    if (!r.ok) return false;
-    const j = await r.json().catch(() => null);
-    // /now always returns an object with these fields (even when idle).
-    return !!j && 'updatedAt' in j && 'playing' in j;
-  } catch { return false; }
-}
-
 // Build a minimal application menu — without this Electron generates a
 // default one whose first label is hardcoded to "Electron" (ignoring
 // app.setName). role:'appMenu' reads `app.getName()` at build time, so the
@@ -378,16 +388,7 @@ app.whenReady().then(async () => {
   // Raycast. The Tray (built below) is the only persistent visible entry.
   if (process.platform === 'darwin' && app.dock) app.dock.hide();
 
-  if (await detectExistingMuse()) {
-    dialog.showMessageBoxSync({
-      type: 'info',
-      message: 'Muse 已经在运行',
-      detail: `检测到 127.0.0.1:${NOW_PORT}/now 已由另一个实例提供服务（Muse 和 MuseV2 共用端口，同一时间只能开一个）。\n\n请使用已有窗口，或先退出它再重新启动。`,
-      buttons: ['好'],
-    });
-    app.quit();
-    return;
-  }
+  if (!gotLock) return;   // another MuseV2 has it (see requestSingleInstanceLock)
 
   try {
     store = new Store(path.join(app.getPath('userData'), 'data'));
@@ -399,8 +400,8 @@ app.whenReady().then(async () => {
     // clear error since the UI would appear functional but hit "fetch
     // failed" everywhere.
     console.error('[muse] startup failed', e);
-    dialog.showErrorBox('muse 启动失败', (e?.message || String(e)) +
-      `\n\n常见原因：${NCM_PORT}/${NOW_PORT} 端口被其他程序占用，或 userData 目录不可写。`);
+    dialog.showErrorBox('MuseV2 启动失败', (e?.message || String(e)) +
+      `\n\n常见原因：${NCM_PORT} 或 ${NOW_PORTS.join('/')} 端口被其他程序占用，或 userData 目录不可写。`);
     app.quit();
     return;
   }
