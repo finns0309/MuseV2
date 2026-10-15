@@ -101,6 +101,9 @@ export const store = new Store({
     bg: null,                       // resolved panel bg (#rrggbb) — mirrored to the native window
     menuBar: true,                  // the playing song's title beside the tray icon
   },
+  // How playback sounds (player.js): fades between / around tracks, and
+  // loudness matching from NetEase's ReplayGain-style `gain`.
+  playback: { fades: true, normalize: true },
 });
 
 // ---- High-level actions ----------------------------------------------------
@@ -130,6 +133,13 @@ export const actions = {
     store.set((s) => ({ ...s, appearance: { ...s.appearance, theme } }));
   },
 
+  setPlaybackPref(key, on) {
+    if (key !== 'fades' && key !== 'normalize') throw new TypeError('setPlaybackPref: fades | normalize');
+    const v = !!on;
+    if (store.get().playback?.[key] === v) return;
+    store.set((s) => ({ ...s, playback: { ...s.playback, [key]: v } }));
+  },
+
   setMenuBar(on) {
     const v = !!on;
     if (store.get().appearance.menuBar === v) return;
@@ -150,11 +160,11 @@ export const actions = {
 // a relaunch go in here — mode + appearance. Library persistence lives in lib/library.js.
 let saveTimer;
 store.selectKey(
-  (s) => `${s.mode}|${s.appearance.scheme}|${s.appearance.theme}|${s.appearance.accent}|${s.appearance.bg}`,
+  (s) => `${s.mode}|${s.appearance.scheme}|${s.appearance.theme}|${s.appearance.accent}|${s.appearance.bg}|${s.appearance.menuBar}|${s.playback?.fades}|${s.playback?.normalize}`,
   (s) => {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
-      window.muse.store.set('ui-prefs', { mode: s.mode, appearance: s.appearance })
+      window.muse.store.set('ui-prefs', { mode: s.mode, appearance: s.appearance, playback: s.playback })
         .catch((e) => console.warn('[store] persist ui-prefs failed', e));
     }, 300);
   }

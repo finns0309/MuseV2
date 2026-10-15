@@ -35,6 +35,10 @@ const els = {
         bg: null,
         menuBar: prefs.appearance?.menuBar !== false,
       },
+      playback: {
+        fades: prefs.playback?.fades !== false,
+        normalize: prefs.playback?.normalize !== false,
+      },
     });
   }
   applyAppearance(store.get().appearance);

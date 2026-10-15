@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('muse', {
   clearCookie: () => ipcRenderer.invoke('cookie-clear'),
   onOpenCommandSurface: (cb) => ipcRenderer.on('open-command-surface', () => cb()),
   hideWindow: () => ipcRenderer.invoke('hide-window'),
+  copyText: (text) => ipcRenderer.invoke('copy-text', text),
   // Text beside the menu-bar icon ('' clears it).
   setTrayTitle: (text) => ipcRenderer.invoke('tray-title', text),
   resizeWindow: (w, h) => ipcRenderer.invoke('resize-window', w, h),

@@ -14,6 +14,7 @@ import {
   setTimeSession,
 } from './modes/session.js';
 import * as memory from './lib/memory.js';
+import * as sleep from './lib/sleep.js';
 import * as player from './player.js';
 import { fetchSimilar } from './lib/similar.js';
 import { toggleHeart } from './lib/library.js';
@@ -338,6 +339,48 @@ function eraLeaves() {
   return out;
 }
 
+// Playback: the sleep timer, smooth transitions, loudness matching.
+function playbackLeaves() {
+  const st = sleep.state();
+  const { fades, normalize } = store.get().playback || {};
+  const timer = (title, minutes) => ({
+    kind: 'sleep', icon: 'timer', title, desc: 'fades out, then pauses',
+    checked: !!st.endsAt && Math.abs(st.endsAt - Date.now() - minutes * 60_000) < 60_000,
+    keywords: ['sleep', 'timer', String(minutes)],
+    run: () => { sleep.after(minutes); return { ok: `sleep · in ${sleep.label()}` }; },
+  });
+  const out = [
+    timer('In 15 minutes', 15), timer('In 30 minutes', 30), timer('In 45 minutes', 45), timer('In an hour', 60),
+    {
+      kind: 'sleep', icon: 'timer', title: 'After this song', desc: 'stop when it ends',
+      checked: st.endOfSong, keywords: ['sleep', 'stop', 'end'],
+      run: () => { sleep.atEndOfSong(); return { ok: 'stops after this song' }; },
+    },
+  ];
+  if (st.active) {
+    out.push({
+      kind: 'sleep', icon: 'x', title: 'Cancel the timer', desc: `it would stop ${sleep.label() === 'after this song' ? 'after this song' : `in ${sleep.label()}`}`,
+      keywords: ['sleep', 'cancel', 'off'],
+      run: () => { sleep.cancel(); return { ok: 'sleep timer off' }; },
+    });
+  }
+  out.push(
+    {
+      kind: 'playback', icon: 'waves', title: 'Smooth transitions',
+      desc: 'fade between songs, and in and out of pauses',
+      checked: fades !== false, keywords: ['fade', 'crossfade', 'transition'],
+      run: () => { actions.setPlaybackPref('fades', fades === false); return { ok: `transitions · ${fades === false ? 'smooth' : 'cut'}` }; },
+    },
+    {
+      kind: 'playback', icon: 'volume', title: 'Even out loudness',
+      desc: 'turn down tracks mastered louder than the rest',
+      checked: normalize !== false, keywords: ['loudness', 'normalize', 'volume', 'replaygain'],
+      run: () => { actions.setPlaybackPref('normalize', normalize === false); return { ok: `loudness · ${normalize === false ? 'even' : 'as mastered'}` }; },
+    },
+  );
+  return out;
+}
+
 const filterLeaves = (leaves, f) => leaves.filter((e) => matches(f, e.title, e.desc, ...(e.keywords || [])));
 
 // -- scopes --
@@ -377,6 +420,17 @@ const SCOPES = [
     },
     items: (f) => filterLeaves(eraLeaves(), f),
     leaves: eraLeaves,
+  },
+  {
+    id: 'playback', aliases: ['sleep', 'timer', 'fade', 'fades', 'loudness'], title: 'Playback', icon: 'sliders', group: LISTEN,
+    row() {
+      const st = sleep.state();
+      return st.active
+        ? { desc: 'sleep timer on', value: sleep.label() === 'after this song' ? 'After this song' : `☾ ${sleep.label()}` }
+        : { desc: 'sleep timer, fades, loudness' };
+    },
+    items: (f) => filterLeaves(playbackLeaves(), f),
+    leaves: playbackLeaves,
   },
   {
     id: 'mode', aliases: ['modes', 'radio'], title: 'Mode', icon: 'radio', group: LISTEN,

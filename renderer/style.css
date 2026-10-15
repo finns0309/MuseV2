@@ -517,6 +517,17 @@ body[data-theme="muse"] .cmdk-panel:not(.paused) .cmdk-mark {
 .cmdk-tool:disabled { opacity: 0.4; cursor: default; }
 .cmdk-tool--heart { font-family: var(--font-body); font-size: 12px; }
 .cmdk-tool--heart.on { color: var(--accent); border-color: color-mix(in srgb, var(--accent), transparent 60%); }
+/* ☾ 24m — the sleep timer, when set. */
+.cmdk-sleep {
+  height: 24px;
+  padding: 0 9px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--accent), transparent 88%);
+  color: color-mix(in srgb, var(--accent), var(--fg) 30%);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.cmdk-sleep[hidden] { display: none; }
 /* Session label — why the current queue exists (mode / manual / radio /
    playlist). Sits where a model picker would; clicking opens /mode. */
 .cmdk-session {

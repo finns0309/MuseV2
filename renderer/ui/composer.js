@@ -13,6 +13,7 @@ import { resolveScope } from '../commands.js';
 import { MODES } from '../modes/index.js';
 import { setTimeSession } from '../modes/session.js';
 import * as memory from '../lib/memory.js';
+import * as sleep from '../lib/sleep.js';
 
 let inputEl, scopeEl, sendEl, heartEl, sessionEl, chipsEl;
 let scope = null;         // { id, title }
@@ -49,6 +50,16 @@ export function mountComposer(root, h) {
   root.querySelector('[data-role=slash]').addEventListener('click', () => setValue('/'));
   heartEl.addEventListener('click', () => handlers.toggleLike());
   sessionEl.addEventListener('click', () => setValue('/mode '));
+  // ☾ 24m — the sleep timer, when one is set. Click to change or cancel it.
+  const sleepEl = root.querySelector('[data-role=sleep]');
+  sleepEl.addEventListener('click', () => setValue('/sleep '));
+  const renderSleep = () => {
+    const st = sleep.state();
+    sleepEl.hidden = !st.active;
+    sleepEl.textContent = st.endOfSong ? '☾ after this' : `☾ ${sleep.label(st)}`;
+  };
+  sleep.onChange(renderSleep);
+  setInterval(() => { if (sleep.state().active) renderSleep(); }, 20_000);
   sendEl.addEventListener('click', () => {
     if (inputEl.value.trim()) handlers.runSelected();
     else player.toggle();

@@ -56,6 +56,7 @@ Everything happens in the palette. Type to search; prefix with `/` for commands.
 | `/era` | your listening by month (plays, the song you played most) — `↵` plays that month's top 50. "↺ N months ago today" sits on top, and as a chip at home |
 | `/mode <q>` `/theme <q>` | pick a mode / theme — themes, accents and light/dark keep the menu open so you can flip through them |
 | `/appearance` | light / dark, and **Song in the menu bar** — the playing title beside the tray icon (`✻ 夜に駆ける` while it plays) |
+| `/sleep` (Playback) | sleep in 15 / 30 / 45 / 60 min (fades out, then pauses) or **after this song**; a `☾ 24m` badge in the toolbar while set. Also **Smooth transitions** (fades between songs and around pauses) and **Even out loudness** (NetEase's ReplayGain-style gain, louder masters turned down) |
 | `/accent #d8b35f` | pin an accent (presets: Clay, Vermilion, Lake, Moss, Plum); *Auto* follows the cover in muse, the theme's own ink elsewhere |
 
 | Key | Action |
@@ -69,6 +70,7 @@ Everything happens in the palette. Type to search; prefix with `/` for commands.
 | `⌘Enter` / `⇧Enter` | play this song next / add it to the end of the queue — without interrupting what's playing |
 | `⌥↑` `⌥↓` · `⌘⌫` | in `/queue`: move the selected song · remove it (with an empty input) |
 | `⌘D` | like / unlike what's playing (`⌘`-click a row to like that song) |
+| `⌘C` | with nothing selected: copy the song (selected row, or what's playing) as `title — artists` + its NetEase link |
 | `⌘I` | the selected song's story beside the list — liked since, plays, first / last heard, the month you played it most (at home: opens the queue on what's playing) |
 | `Esc` | clear the input, then hide the window |
 

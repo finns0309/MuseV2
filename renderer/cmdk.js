@@ -111,6 +111,7 @@ export function mount(el) {
           <button class="cmdk-tool" data-role="slash" title="Commands" aria-label="Commands">/</button>
           <button class="cmdk-tool cmdk-tool--heart" data-role="heart" title="Like (⌘D)" aria-label="Like">${GLYPH.LIKED}</button>
           <span class="cmdk-toolbar__gap"></span>
+          <button class="cmdk-sleep" data-role="sleep" title="Sleep timer" hidden></button>
           <button class="cmdk-session" data-role="session" title="Change mode"></button>
           <button class="cmdk-send" data-role="send" aria-label="Play or pause"></button>
         </div>
@@ -173,6 +174,15 @@ export function mount(el) {
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'd') {
       e.preventDefault();
       toggleCurrent();
+      return;
+    }
+    // ⌘C with nothing selected copies the song — the selected row's, or
+    // what's playing — as "title — artists" + its NetEase link.
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'c') {
+      const textSelected = !!window.getSelection()?.toString() || inputEl.selectionStart !== inputEl.selectionEnd;
+      const searching = !panelEl.classList.contains('idle');
+      const t = (searching && list.current()?.track) || store.get().player.track;
+      if (!textSelected && t) { e.preventDefault(); copySong(t); }
       return;
     }
     // ⌘I — the selected song's story beside the list. At home there's no
@@ -498,6 +508,14 @@ function toggleCurrent() {
   toggleHeart(t)
     .then((r) => toast.show(r.isHearted ? `liked · ${t.name}` : `unliked · ${t.name}`, 'ok'))
     .catch((err) => toast.show(err?.message || 'like failed', 'error'));
+}
+
+function copySong(t) {
+  const artists = (t.ar || []).map((a) => a.name).join(', ');
+  const text = `${t.name}${artists ? ` — ${artists}` : ''}\nhttps://music.163.com/song?id=${t.id}`;
+  Promise.resolve(window.muse.copyText?.(text) ?? navigator.clipboard.writeText(text))
+    .then(() => toast.show(`copied · ${t.name}`, 'ok'))
+    .catch(() => toast.show('couldn’t copy', 'error'));
 }
 
 function doHide() {

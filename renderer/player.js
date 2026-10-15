@@ -123,6 +123,8 @@ export async function playTrack(track, queue = null, queueIdx = -1) {
 
   // Same track again and we hold it in memory: no URL round-trip at all.
   if (cacheReadyFor(track.id)) {
+    await fadeOutForSwitch();
+    if (!ok()) return;
     audio.src = cache.url;
     srcIsBlob = true;
     loadedTrackId = track.id;
@@ -142,6 +144,8 @@ export async function playTrack(track, queue = null, queueIdx = -1) {
     const r = await api('/song/url/v1', { id: track.id, level: 'standard' },
       { timeout: 5_000, retry: { attempts: 2, baseDelayMs: 250 } });
     url = r?.data?.[0]?.url;
+    const gain = r?.data?.[0]?.gain;
+    if (typeof gain === 'number') gainById.set(track.id, gain);
   } catch (e) {
     if (!ok()) return;
     store.set((s) => ({ ...s, player: prevSnapshot }));
@@ -155,6 +159,8 @@ export async function playTrack(track, queue = null, queueIdx = -1) {
     throw new ApiError('unavailable or no license', { path: '/song/url/v1' });
   }
 
+  await fadeOutForSwitch();
+  if (!ok()) return;
   audio.src = url;
   srcIsBlob = false;
   loadedTrackId = track.id;
@@ -236,6 +242,8 @@ async function reloadCurrent({ autoplay }) {
 
 async function resume() {
   if (!store.get().player.track) return;
+  // Play pressed again inside a pause's fade-out: cancel it and come back up.
+  if (pauseTimer) { clearTimeout(pauseTimer); pauseTimer = null; rampTo(baseGain(), RESUME_FADE_S); return; }
   if (urlStale()) { await reloadCurrent({ autoplay: true }); return; }
   try { await audio.play(); }
   catch (e) {
@@ -284,8 +292,13 @@ export function setLoop(single) {
 }
 export function setQueueLoop(flag) { queueLoop = !!flag; }
 
-export function toggle() { if (audio.paused) resume(); else audio.pause(); }
-export function pause()  { audio.pause(); }
+export function toggle() { if (audio.paused || pauseTimer) resume(); else pause(); }
+export function pause()  {
+  if (audio.paused || pauseTimer) return;
+  if (!fadesOn() || !gainNode) { audio.pause(); return; }
+  rampTo(0, PAUSE_FADE_S);
+  pauseTimer = setTimeout(() => { pauseTimer = null; audio.pause(); }, PAUSE_FADE_S * 1000 + 15);
+}
 export function play()   { resume(); }
 
 export function seek(t) {
@@ -318,6 +331,75 @@ export function playAt(idx) {
   if (!queue.length || idx < 0 || idx >= queue.length) return;
   playFromQueue(queue, idx, 1, { allowLoop: false }).catch(swallowExpected);
 }
+
+// ---- Fades, loudness, stop-after ---------------------------------------------
+// A GainNode in the Web Audio graph (ensureAnalyser) does three things:
+//   · smooth transitions — a short fade out before a switch or a pause, a
+//     fade in on play, and the last 1.6s of a track fading out naturally;
+//   · loudness matching — NetEase's /song/url/v1 returns a ReplayGain-style
+//     `gain` (dB, negative = loud master); tracks louder than REF_GAIN_DB are
+//     turned down to it. Never boosted: peak is already at full scale.
+//   · the sleep timer's long fade (fadeOutAndPause).
+// Both are prefs (store.playback.fades / .normalize, default on).
+
+const START_FADE_S = 0.35;
+const RESUME_FADE_S = 0.12;
+const PAUSE_FADE_S = 0.14;
+const SWITCH_FADE_S = 0.18;
+const END_FADE_S = 1.6;
+const REF_GAIN_DB = -7;
+
+let gainNode = null;
+let pauseTimer = null;       // a pause waiting for its fade-out
+let endFading = false;
+let stopAfter = false;
+const gainById = new Map();
+const stopAfterHandlers = new Set();
+
+const fadesOn = () => store.get().playback?.fades !== false;
+const normalizeOn = () => store.get().playback?.normalize !== false;
+
+function baseGain() {
+  const g = gainById.get(loadedTrackId);
+  if (!normalizeOn() || typeof g !== 'number') return 1;
+  return Math.min(1, Math.pow(10, (g - REF_GAIN_DB) / 20));
+}
+
+function rampTo(v, sec) {
+  if (!gainNode || !ac) return;
+  const p = gainNode.gain;
+  const t = ac.currentTime;
+  p.cancelScheduledValues(t);
+  p.setValueAtTime(p.value, t);
+  p.linearRampToValueAtTime(v, t + Math.max(0.01, sec));
+}
+
+async function fadeOutForSwitch() {
+  if (!fadesOn() || !gainNode || audio.paused) return;
+  rampTo(0, SWITCH_FADE_S);
+  await new Promise((r) => setTimeout(r, SWITCH_FADE_S * 1000));
+}
+
+// Re-apply the level when the normalize pref flips mid-track.
+export function refreshLevel() {
+  if (gainNode && !audio.paused && !endFading) rampTo(baseGain(), 0.25);
+}
+store.select((s) => s.playback?.normalize, (v, prev) => { if (prev !== undefined) refreshLevel(); });
+
+// The sleep timer: fade over `sec`, then pause (the next play fades back in).
+export async function fadeOutAndPause(sec = 6) {
+  if (audio.paused) return;
+  if (gainNode) {
+    rampTo(0, sec);
+    await new Promise((r) => setTimeout(r, sec * 1000));
+  }
+  audio.pause();
+}
+
+// "End of this song": the next `ended` stops instead of advancing.
+export function setStopAfterCurrent(on) { stopAfter = !!on; }
+export const stopsAfterCurrent = () => stopAfter;
+export function onStoppedAfterCurrent(fn) { stopAfterHandlers.add(fn); return () => stopAfterHandlers.delete(fn); }
 
 // ---- Queue editing ---------------------------------------------------------
 // The queue is store.player.queue with queueIdx pointing at what's playing.
@@ -493,6 +575,14 @@ audio.addEventListener('ended', () => {
   // scrobble the play we just finished.
   for (const fn of endHandlers) { try { fn(); } catch (e) { console.error(e); } }
   maybeScrobble();
+  if (stopAfter) {
+    // Sleep timer "end of this song": stay on this track, stopped.
+    stopAfter = false;
+    for (const fn of stopAfterHandlers) { try { fn(); } catch (e) { console.error(e); } }
+    patch({ playing: false });
+    pushPlayerState();
+    return;
+  }
   if (singleLoop) {
     // Repeat-one: replay the same track and reset the scrobble accumulator so
     // the next round is reported as its own play (startplay + playend again).
@@ -539,6 +629,17 @@ audio.addEventListener('timeupdate', () => {
   lastPushed = now;
   patch({ currentTime: audio.currentTime || 0 });
   pushPlayerState();
+  // Natural end: let the last stretch fade instead of cutting off.
+  const left = (audio.duration || 0) - audio.currentTime;
+  if (fadesOn() && gainNode && !endFading && left > 0 && left < END_FADE_S) {
+    endFading = true;
+    rampTo(0, left);
+  }
+});
+audio.addEventListener('seeked', () => {
+  // Seeking back out of the end-fade restores the level.
+  const left = (audio.duration || 0) - audio.currentTime;
+  if (endFading && left >= END_FADE_S) { endFading = false; rampTo(baseGain(), 0.12); }
 });
 
 function patch(partial) {
@@ -591,10 +692,14 @@ function ensureAnalyser() {
   const Ctx = window.AudioContext || window.webkitAudioContext;
   ac = new Ctx();
   const src = ac.createMediaElementSource(audio);
+  // element → gain (fades, loudness) → analyser → speakers. The analyser sits
+  // after the gain so what echo and the spark see is what you hear.
+  gainNode = ac.createGain();
   analyser = ac.createAnalyser();
   analyser.fftSize = 512;                // → 256 frequency bins
   analyser.smoothingTimeConstant = 0.78; // empirical — stable visuals w/o mud
-  src.connect(analyser);
+  src.connect(gainNode);
+  gainNode.connect(analyser);
   // CRITICAL: createMediaElementSource rewires the element's default output;
   // if this edge is missing, the user hears nothing the moment the graph
   // activates. Keep it.
@@ -672,6 +777,18 @@ audio.addEventListener('play', () => {
   try {
     ensureAnalyser();
     if (ac.state === 'suspended') ac.resume().catch(() => {});
+    // Fade in: softly at the top of a track, quickly on resume. Without
+    // fades, just sit at the track's loudness-matched level.
+    endFading = false;
+    const target = baseGain();
+    if (fadesOn()) {
+      gainNode.gain.cancelScheduledValues(ac.currentTime);
+      gainNode.gain.setValueAtTime(0, ac.currentTime);
+      rampTo(target, audio.currentTime < 0.6 ? START_FADE_S : RESUME_FADE_S);
+    } else {
+      gainNode.gain.cancelScheduledValues(ac.currentTime);
+      gainNode.gain.setValueAtTime(target, ac.currentTime);
+    }
   } catch (e) {
     console.warn('[player] analyser init failed', e);
   }

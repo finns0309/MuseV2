@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, Tray, ipcMain, dialog, globalShortcut, nativeImage } = require('electron');
+const { app, BrowserWindow, Menu, Tray, ipcMain, dialog, globalShortcut, nativeImage, clipboard } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
@@ -245,6 +245,8 @@ ipcMain.handle('set-window-bg', (_, color) => {
 // format); the key and endpoint stay here. See lib/llm.js.
 ipcMain.handle('llm-available', () => llm.available());
 ipcMain.handle('llm-respond', (_, body) => llm.respond(body));
+
+ipcMain.handle('copy-text', (_, text) => { clipboard.writeText(String(text || '')); });
 
 // The playing song beside the menu-bar icon — the renderer decides the text
 // (and whether to show any; see renderer/ui/ambient.js).
