@@ -1,4 +1,14 @@
-# muse
+# MuseV2
+
+> Forked from **muse v0.1.6** (`git tag v0.1.6`, github.com/finns0309/muse) on
+> 2026-10-15 to grow a Claude-style surface on its own. muse v1 keeps
+> iterating on the original architecture in its own folder; the two share
+> history up to v0.1.6 and nothing after.
+>
+> Runs as a separate app (**MuseV2**, `com.finn.musev2`, data in
+> `~/Library/Application Support/MuseV2`) but on the **same ports**
+> (10754 NCM API, 10755 `/now` for echo) — so only one of Muse / MuseV2 can
+> run at a time.
 
 A summon-anywhere command palette for NetEase Cloud Music. Hit
 **⌥Space**, change what's playing, and it's gone again. No dock icon, no

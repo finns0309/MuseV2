@@ -10,7 +10,7 @@ const { Store } = require('./lib/store');
 // Electron reads `app.getName()` (the About panel, the application menu
 // built below, user-data path). Without this the default "Electron"
 // identity leaks into visible surfaces.
-app.setName('Muse');
+app.setName('MuseV2');   // also picks the userData dir: ~/Library/Application Support/MuseV2
 
 const ICON_PATH = path.join(__dirname, 'assets', 'icon.png');
 const TRAY_PATH = path.join(__dirname, 'assets', 'trayTemplate.png');
@@ -331,7 +331,7 @@ async function detectExistingMuse() {
 // Build a minimal application menu — without this Electron generates a
 // default one whose first label is hardcoded to "Electron" (ignoring
 // app.setName). role:'appMenu' reads `app.getName()` at build time, so the
-// first menu now reads "Muse". editMenu is included so ⌘C/⌘V/⌘A work in
+// first menu now reads "MuseV2". editMenu is included so ⌘C/⌘V/⌘A work in
 // the cmdk input and login field.
 function installAppMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate([
@@ -346,11 +346,11 @@ function buildTray() {
     const img = nativeImage.createFromPath(TRAY_PATH);
     img.setTemplateImage(true);   // macOS tints for light/dark menu bar
     tray = new Tray(img);
-    tray.setToolTip('muse');
+    tray.setToolTip('MuseV2');
     tray.setContextMenu(Menu.buildFromTemplate([
-      { label: 'Show muse', accelerator: 'Alt+Space', click: showCommandSurface },
+      { label: 'Show MuseV2', accelerator: 'Alt+Space', click: showCommandSurface },
       { type: 'separator' },
-      { label: 'Quit muse', accelerator: 'Command+Q', click: () => { app.isQuitting = true; app.quit(); } },
+      { label: 'Quit MuseV2', accelerator: 'Command+Q', click: () => { app.isQuitting = true; app.quit(); } },
     ]));
     // Left-click the tray icon → summon (right-click shows the menu).
     tray.on('click', showCommandSurface);
@@ -366,8 +366,8 @@ app.whenReady().then(async () => {
   if (await detectExistingMuse()) {
     dialog.showMessageBoxSync({
       type: 'info',
-      message: 'muse 已经在运行',
-      detail: `检测到 127.0.0.1:${NOW_PORT}/now 已由另一个 muse 实例提供服务。\n\n请使用已有窗口，或先退出它再重新启动。`,
+      message: 'Muse 已经在运行',
+      detail: `检测到 127.0.0.1:${NOW_PORT}/now 已由另一个实例提供服务（Muse 和 MuseV2 共用端口，同一时间只能开一个）。\n\n请使用已有窗口，或先退出它再重新启动。`,
       buttons: ['好'],
     });
     app.quit();

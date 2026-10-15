@@ -1,4 +1,10 @@
-# Releasing & maintaining muse
+# Releasing & maintaining MuseV2
+
+> MuseV2 has **no GitHub repo yet**. `build.publish` points at
+> `finns0309/MuseV2`, so `npm run release` fails until that repo exists —
+> by design, so a V2 build can never land on muse v1's releases page. The
+> v1 links below are kept for reference. `npm run build` (local install)
+> works today and produces `MuseV2.app`.
 
 Three separate workflows — don't mix them up:
 

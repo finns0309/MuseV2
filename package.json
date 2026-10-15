@@ -1,7 +1,7 @@
 {
-  "name": "muse",
-  "productName": "Muse",
-  "version": "0.1.6",
+  "name": "muse-v2",
+  "productName": "MuseV2",
+  "version": "2.0.0-alpha.0",
   "private": true,
   "description": "Local NetEase music runtime for fast library routing and accurate echo state.",
   "author": "Finn",
@@ -20,11 +20,11 @@
     "electron-builder": "^26.8.1"
   },
   "build": {
-    "appId": "com.finn.muse",
+    "appId": "com.finn.musev2",
     "publish": {
       "provider": "github",
       "owner": "finns0309",
-      "repo": "muse"
+      "repo": "MuseV2"
     },
     "mac": {
       "target": "dmg",
@@ -43,7 +43,7 @@
       "node_modules/**/*"
     ],
     "dmg": {
-      "title": "Muse"
+      "title": "MuseV2"
     }
   }
 }
