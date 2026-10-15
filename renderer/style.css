@@ -485,7 +485,7 @@ body[data-theme="claude"][data-scheme="light"] {
   place-items: center;
   width: 34px;
   height: 34px;
-  border-radius: 50%;
+  border-radius: var(--radius-pill);   /* round; paper's 3px; mono's square */
   background: rgba(255, 255, 255, 0.86);
   color: #1b1a19;
   box-shadow: 0 6px 18px -6px rgba(0, 0, 0, 0.45);
@@ -700,11 +700,20 @@ body[data-theme="muse"] .cmdk-panel:not(.paused) .cmdk-mark {
 /* ---- Chips — the listening modes, under the composer at home ---- */
 .cmdk-chips {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
+  flex-wrap: nowrap;               /* one row, always — the idle height counts on it */
+  justify-content: safe center;
   gap: 6px;
   padding: 0 16px 14px;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
+.cmdk-chips::-webkit-scrollbar { display: none; }
+/* Wider than the window (mono's wide face, the ↺ chip): it scrolls, and the
+   edges fade so it's clear there's more. */
+.cmdk-chips.overflow {
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 22px, #000 calc(100% - 22px), transparent 100%);
+}
+.cmdk-chip { flex: 0 0 auto; white-space: nowrap; }
 .cmdk-panel:not(.idle) .cmdk-chips { display: none; }
 .cmdk-chips { position: relative; }
 .cmdk-chip {
@@ -1456,6 +1465,7 @@ body[data-theme="mono"] .cmdk-list li.cmdk-sec::after {
 body[data-theme="mono"] .cmdk-list li.cmdk-sec .sec-cnt { order: 2; }
 
 body[data-theme="mono"] .cmdk-mark { color: var(--fg); animation: none; opacity: 1; font-size: 15px; }
+body[data-theme="mono"] .cmdk-chip { padding: 0 9px; font-size: 11.5px; }
 body[data-theme="mono"] .cmdk-input { font-size: 14px; letter-spacing: 0; }
 
 body[data-theme="mono"] .cmdk-now__title { font-weight: 700; letter-spacing: 0; }

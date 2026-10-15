@@ -181,7 +181,15 @@ function renderChips(s) {
 // The active chip's tint is one pill that glides to whichever chip is on —
 // the same idea as the list cursor.
 function placeGlide() {
+  chipsEl.classList.toggle('overflow', chipsEl.scrollWidth > chipsEl.clientWidth + 1);
   const on = chipsEl.querySelector('.cmdk-chip.on');
+  // Keep the active chip in view when the row scrolls.
+  // (Only the row scrolls — scrollIntoView would also nudge the panel.)
+  if (on && chipsEl.classList.contains('overflow')) {
+    const l = on.offsetLeft, r = l + on.offsetWidth, pad = 24;
+    if (l - pad < chipsEl.scrollLeft) chipsEl.scrollLeft = l - pad;
+    else if (r + pad > chipsEl.scrollLeft + chipsEl.clientWidth) chipsEl.scrollLeft = r + pad - chipsEl.clientWidth;
+  }
   if (!on || !on.offsetWidth) { glideEl.style.opacity = '0'; return; }
   const first = glideEl.style.opacity !== '1';
   if (first) glideEl.style.transition = 'none';

@@ -227,7 +227,13 @@ export function mount(el) {
   // measured for the old ones — re-seat it without the glide.
   store.selectKey(
     (s) => `${s.appearance.theme}|${s.appearance.scheme}`,
-    () => requestAnimationFrame(() => { list.seat(false); composer.reseatChips(); })
+    () => {
+      // The theme's styles are already applied (app.js subscribes first), so
+      // offsets are current now; again shortly after for the font swap.
+      list.seat(false);
+      composer.reseatChips();
+      setTimeout(() => { list.seat(false); composer.reseatChips(); }, 250);
+    }
   );
 
   // Window appear (global hotkey). Focus synchronously — the first keystroke
