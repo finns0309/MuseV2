@@ -13,7 +13,8 @@ import * as player from './player.js';
 import * as accent from './accent.js';
 import * as playlist from './playlist.js';
 import * as tx from './transitions.js';
-import { COMMAND_BUILDERS, SONG_BUILDERS, ASYNC_BUILDERS, injectSetInput, formatArtists } from './commands.js';
+import { buildCommands, resolveScope, SONG_BUILDERS, ASYNC_BUILDERS, injectSetInput, formatArtists } from './commands.js';
+import { icon } from './icons.js';
 import { GLYPH } from './glyphs.js';
 import { toggleHeart } from './lib/library.js';
 import { MODES } from './modes/index.js';
@@ -21,7 +22,7 @@ import { MODES } from './modes/index.js';
 // ---- DOM refs ---------------------------------------------------------------
 
 let rootEl, panelEl, inputEl, listEl, toastEl, nowEl, nowCoverEl, nowTitleEl, nowArtistEl, nowTimeEl, nowProgressEl, sessionEl;
-let greetingEl, greetingTextEl, sendEl, heartEl, chipsEl;
+let greetingEl, greetingTextEl, sendEl, heartEl, chipsEl, scopeEl;
 let cursorEl = null;
 
 // ---- State ------------------------------------------------------------------
@@ -39,6 +40,7 @@ let idleTimer = null;     // staged search → idle transition
 let idleSeq = 0;          // invalidates an in-flight staged transition
 let landing = false;      // Enter → home choreography owns the now-area for a moment
 let thinking = false;     // cloud search in flight → the "✻ Searching NetEase…" row
+let scope = null;         // { id, title } — the `/` submenu we're inside, shown as a chip
 let nowMetaEl;
 
 // ---- Window resize ----------------------------------------------------------
@@ -100,7 +102,8 @@ export function mount(el) {
       <div class="cmdk-composer">
         <div class="cmdk-input-row">
           <span class="cmdk-mark" aria-hidden="true">${GLYPH.MARK}</span>
-          <input class="cmdk-input" spellcheck="false" placeholder="What would you like to hear?" aria-label="Search songs or commands">
+          <span class="cmdk-scope" data-role="scope" hidden></span>
+          <input class="cmdk-input" spellcheck="false" placeholder="${PLACEHOLDER}" aria-label="Search songs or commands">
         </div>
         <div class="cmdk-toolbar">
           <button class="cmdk-tool" data-role="slash" title="Commands" aria-label="Commands">/</button>
@@ -134,6 +137,7 @@ export function mount(el) {
   sendEl       = rootEl.querySelector('[data-role=send]');
   heartEl      = rootEl.querySelector('[data-role=heart]');
   chipsEl      = rootEl.querySelector('[data-role=chips]');
+  scopeEl      = rootEl.querySelector('[data-role=scope]');
 
   // Gliding cursor — lives in the list wrapper, not inside the <ul>.
   cursorEl = document.createElement('div');
@@ -168,7 +172,7 @@ export function mount(el) {
       return;
     }
     if (e.key === 'Escape' && store.get().cmdkOpen) {
-      if (inputEl.value.trim()) { inputEl.value = ''; refresh(); }
+      if (inputEl.value.trim() || scope) { setScope(null); inputEl.value = ''; refresh(); }
       else doHide();
     }
   });
@@ -224,7 +228,7 @@ export function mount(el) {
   // after ⌥Space must never be lost — and start from a clean slate: a blur-hide
   // may have left a half-typed query behind.
   window.muse.onWindowAppear?.(() => {
-    if (inputEl.value) { inputEl.value = ''; entries = []; renderList(); setIdle(true, { instant: true }); }
+    if (inputEl.value || scope) { setScope(null); inputEl.value = ''; entries = []; renderList(); setIdle(true, { instant: true }); }
     renderGreeting(store.get().user?.nickname ?? '');   // the hour may have turned
     tx.animateAppear(panelEl);
     inputEl.focus();
@@ -276,22 +280,28 @@ export function openWith(prefill) { pendingOpenInput = String(prefill || ''); ac
 
 let searchCtrl = null;
 
-function refresh() {
+function refresh({ keepCursor = false } = {}) {
+  // `/theme ` — typed, pasted, or set by a button — becomes a chip + filter.
+  if (!scope) {
+    const m = inputEl.value.match(/^\s*\/(\S+)\s([\s\S]*)$/);
+    const sc = m && resolveScope(m[1]);
+    if (sc) { setScope(sc); inputEl.value = m[2]; }
+  }
   const raw = inputEl.value.trim();
-  const isCmd = raw.startsWith('/');
-  const q = isCmd ? raw.slice(1).trim() : raw;
+  const isCmd = !!scope || raw.startsWith('/');
+  const q = scope ? raw : isCmd ? raw.slice(1).trim() : raw;
 
-  if (isCmd)     entries = COMMAND_BUILDERS.flatMap((b) => b(q));
+  if (isCmd)     entries = buildCommands(scope ? raw : raw.slice(1), scope?.id);
   else if (!q)   entries = [];
   else           entries = SONG_BUILDERS.flatMap((b) => b(q));
 
-  lastQuery = isCmd ? '' : q;   // only highlight matches for bare search
-  cursor = 0;
+  lastQuery = q;
+  cursor = keepCursor ? Math.min(cursor, Math.max(0, entries.length - 1)) : 0;
   thinking = !isCmd && !!q;
   renderList();
   renderSend();
 
-  setIdle(!raw);
+  setIdle(!raw && !scope);
 
   searchCtrl?.abort();
   searchCtrl = new AbortController();
@@ -362,6 +372,7 @@ function land() {
   cursorEl?.classList.add('commit');
   setTimeout(() => cursorEl?.classList.remove('commit'), 160);
   setTimeout(() => {
+    setScope(null);
     inputEl.value = '';
     refresh();
   }, 90);
@@ -387,9 +398,16 @@ function renderList() {
   const intro = introPending;
   introPending = false;
 
-  // Per-group counts for the section headers (library / from netease).
+  // Per-group counts for song sections ("Your library 8"); menus don't count.
   const counts = {};
-  entries.forEach((e) => { if (e.group) counts[e.group] = (counts[e.group] || 0) + 1; });
+  entries.forEach((e) => { if (e.group && e.name !== undefined) counts[e.group] = (counts[e.group] || 0) + 1; });
+  // ♥ only where it tells you something: a section that mixes liked and
+  // unliked songs. "Your library" or an All-mode queue would be all hearts.
+  const mixed = {};
+  for (const g of Object.keys(counts)) {
+    const songs = entries.filter((e) => e.group === g && e.name !== undefined);
+    mixed[g] = songs.some((e) => e.liked) && songs.some((e) => !e.liked);
+  }
 
   let prevGroup = null;
   entries.forEach((e, i) => {
@@ -399,7 +417,7 @@ function renderList() {
       const h = document.createElement('li');
       h.className = 'cmdk-sec';
       const lbl = document.createElement('span'); lbl.className = 'sec-lbl'; lbl.textContent = e.group;
-      const cnt = document.createElement('span'); cnt.className = 'sec-cnt'; cnt.textContent = counts[e.group];
+      const cnt = document.createElement('span'); cnt.className = 'sec-cnt'; cnt.textContent = counts[e.group] || '';
       h.append(lbl, cnt);
       listEl.appendChild(h);
     }
@@ -408,25 +426,8 @@ function renderList() {
     li.className = 'row' + (i === cursor ? ' sel' : '');
     if (intro) { li.classList.add('in'); li.style.animationDelay = `${Math.min(i, 10) * 24}ms`; }
 
-    if (e.name !== undefined) {
-      // structured song row: glyph · name + artist · duration
-      li.classList.add('song');
-      if (e.dim) li.classList.add('dim');
-      const gl = document.createElement('span'); gl.className = 'gl'; gl.textContent = e.glyph || '';
-      const main = document.createElement('div'); main.className = 'rowmain';
-      const nm = document.createElement('span'); nm.className = 'nm'; highlightInto(nm, e.name, lastQuery);
-      const sub = document.createElement('span'); sub.className = 'sub'; sub.textContent = e.sub || '';
-      main.append(nm, sub);
-      const meta = document.createElement('span'); meta.className = 'meta';
-      const dur = document.createElement('span'); dur.className = 'dur'; dur.textContent = e.dur || '';
-      meta.append(dur);
-      li.append(gl, main, meta);
-    } else {
-      // legacy label/hint row (commands, modes, hints)
-      const label = document.createElement('span'); label.className = 'lbl'; label.textContent = e.label;
-      const hint  = document.createElement('span'); hint.className = 'hint'; hint.textContent = e.hint || '';
-      li.append(label, hint);
-    }
+    if (e.name !== undefined) songRow(li, e, mixed[e.group] ?? false);
+    else menuRow(li, e);
 
     li.addEventListener('click', (ev) => execute(i, pickVariant(ev)));
     li.addEventListener('mousemove', () => setCursor(i));
@@ -435,6 +436,65 @@ function renderList() {
   });
   if (thinking) listEl.appendChild(thinkingRow());
   positionCursor(false);
+}
+
+// Song: cover · name ♥ artist ……… duration — or, on the selected row, the
+// keys that act on it (Enter plays, ⌥Enter starts a radio).
+function songRow(li, e, showLiked) {
+  li.classList.add('song');
+  if (e.dim) li.classList.add('dim');
+  const th = document.createElement('span'); th.className = 'tile thumb';
+  if (e.cover) {
+    const img = new Image();
+    img.alt = ''; img.loading = 'lazy'; img.decoding = 'async';
+    img.onerror = () => { img.remove(); th.innerHTML = icon('music'); };
+    img.src = thumbUrl(e.cover);
+    th.appendChild(img);
+  } else th.innerHTML = icon('music');
+  const main = document.createElement('div'); main.className = 'rowmain';
+  const nm = document.createElement('span'); nm.className = 'nm'; highlightInto(nm, e.name, lastQuery);
+  main.append(nm);
+  if (e.liked && showLiked) {
+    const h = document.createElement('span'); h.className = 'liked'; h.textContent = GLYPH.LIKED; h.title = 'In your library';
+    main.append(h);
+  }
+  const sub = document.createElement('span'); sub.className = 'sub'; sub.textContent = e.sub || '';
+  main.append(sub);
+  const meta = document.createElement('span'); meta.className = 'meta';
+  const dur = document.createElement('span'); dur.className = 'dur'; dur.textContent = e.dur || '';
+  meta.append(dur);
+  if (e.altRun) {
+    const keys = document.createElement('span'); keys.className = 'keys';
+    keys.innerHTML = '<kbd>↵</kbd> Play<span class="sep"></span><kbd>⌥↵</kbd> Radio';
+    meta.append(keys);
+  }
+  li.append(th, main, meta);
+}
+
+// Menu: tile (icon or colour swatch) · title  description ……… value ✓ ›
+function menuRow(li, e) {
+  li.classList.add('menu');
+  if (e.inert) li.classList.add('inert');
+  const tile = document.createElement('span'); tile.className = 'tile';
+  if (e.swatch) {
+    tile.classList.add('swatch');
+    tile.style.setProperty('--sw-bg', e.swatch[0]);
+    tile.style.setProperty('--sw-ink', e.swatch[1]);
+  } else tile.innerHTML = icon(e.icon || 'dot');
+  const main = document.createElement('div'); main.className = 'rowmain';
+  const ttl = document.createElement('span'); ttl.className = 'ttl'; highlightInto(ttl, e.title ?? e.label ?? '', lastQuery);
+  const dsc = document.createElement('span'); dsc.className = 'dsc'; dsc.textContent = e.desc ?? e.hint ?? '';
+  main.append(ttl, dsc);
+  const meta = document.createElement('span'); meta.className = 'meta';
+  if (e.value) { const v = document.createElement('span'); v.className = 'val'; v.textContent = e.value; meta.append(v); }
+  if (e.checked) { const c = document.createElement('span'); c.className = 'chk'; c.innerHTML = icon('check'); meta.append(c); }
+  if (e.submenu) { const c = document.createElement('span'); c.className = 'chev'; c.innerHTML = icon('chevron'); meta.append(c); }
+  li.append(tile, main, meta);
+}
+
+// NetEase's CDN resizes on request — a 64px thumb instead of the full cover.
+function thumbUrl(url) {
+  return url.replace(/^http:/, 'https:') + (url.includes('?') ? '&' : '?') + 'param=64y64';
 }
 
 // Cloud search in flight: the spark turns and the words shimmer, the way a
@@ -503,6 +563,25 @@ function onKey(e) {
   // arrive with isComposing / keyCode 229 — never treat those as ours.
   if (e.isComposing || e.keyCode === 229) return;
   if (e.key === 'ArrowDown') { setCursor(Math.min(cursor + 1, entries.length - 1)); e.preventDefault(); return; }
+  // Into a submenu: Tab, or → when the caret is already at the end.
+  const atEnd = inputEl.selectionStart === inputEl.value.length && inputEl.selectionEnd === inputEl.value.length;
+  if (entries[cursor]?.submenu && (e.key === 'Tab' || (e.key === 'ArrowRight' && atEnd))) {
+    enterScope(entries[cursor].submenu);
+    e.preventDefault();
+    return;
+  }
+  // Out of one: Backspace / ← at the very start drops the chip (the text
+  // stays, now searching every command).
+  const atStart = inputEl.selectionStart === 0 && inputEl.selectionEnd === 0;
+  if (scope && atStart && (e.key === 'Backspace' || e.key === 'ArrowLeft')) {
+    const rest = inputEl.value;
+    setScope(null);
+    inputEl.value = '/' + rest;
+    inputEl.setSelectionRange(1, 1);
+    refresh();
+    e.preventDefault();
+    return;
+  }
   if (e.key === 'ArrowUp')   { setCursor(Math.max(cursor - 1, 0)); e.preventDefault(); return; }
   // ⌘D is handled globally (document keydown → toggleCurrent); don't also
   // act on the highlighted row here, or it'd double-fire.
@@ -528,11 +607,15 @@ function execute(i, variant = 'primary') {
   Promise.resolve()
     .then(() => handler())
     .then((res) => {
+      if (res?.scope) { enterScope(res.scope); return; }
       if (res?.ok) showToast(res.ok, 'ok');
       if (res?.warn) showToast(res.warn, 'warn');
       if (res?.home && !landedEarly) land();
       else if (res?.close && !landedEarly) actions.closeCmdk();
-      else if (variant === 'heart') refresh();
+      else if (variant === 'heart') refresh({ keepCursor: true });
+      // A menu choice (theme, accent, light/dark) keeps the menu open and
+      // re-renders so the ✓ moves — flipping through themes is one key each.
+      else if (!landedEarly) refresh({ keepCursor: true });
     })
     .catch((err) => { console.warn('cmdk run', err); showToast(err?.message || String(err), 'error'); });
 }
@@ -567,6 +650,30 @@ function wireComposer() {
     const chip = e.target.closest('[data-mode]');
     if (chip) actions.setMode(chip.dataset.mode);
   });
+}
+
+// The chip: which `/` submenu the input is filtering.
+const PLACEHOLDER = 'What would you like to hear?';
+const SCOPE_PLACEHOLDER = {
+  playlist: 'Filter, or paste a NetEase link…',
+  accent: 'Pick one, or type a hex…',
+};
+function setScope(sc) {
+  scope = sc || null;
+  if (!scopeEl) return;
+  scopeEl.hidden = !scope;
+  scopeEl.textContent = scope ? scope.title : '';
+  inputEl.placeholder = !scope ? PLACEHOLDER
+    : SCOPE_PLACEHOLDER[scope.id] || `Filter ${scope.title.toLowerCase()}…`;
+}
+
+function enterScope(id) {
+  const sc = resolveScope(id);
+  if (!sc) return;
+  setScope(sc);
+  inputEl.value = '';
+  inputEl.focus();
+  refresh();
 }
 
 function setInputValue(v) {

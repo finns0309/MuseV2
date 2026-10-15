@@ -48,14 +48,12 @@ Everything happens in the palette. Type to search; prefix with `/` for commands.
 | Input | Does |
 |-------|------|
 | `<query>` | search your library (and NetEase cloud at ≥2 chars) |
-| `/queue` `/queue <q>` | browse / filter the current queue |
-| `/library` `/library <q>` | browse / filter your liked library |
-| `/pl` | list saved playlists |
+| `/` | the menu: **Listen** — Queue, Library, Playlists, Mode · **Look** — Appearance, Theme, Accent. Each shows its current value; `Enter` / `→` / `Tab` opens it as a chip in the input, `Backspace` at the start closes it |
+| `/<words>` | search every command at once, grouped by menu (`/da` → Daily, Dark; `/claude` → the theme) |
+| `/queue <q>` `/lib <q>` | filter the queue (Now playing · Up next · Played) or your library |
 | `/pl <id or url>` | load a NetEase playlist and remember it |
-| `/mode`, `/daily`, `/discover`, … | switch listening mode |
-| `/light` `/dark` | appearance |
-| `/theme` `/theme <muse\|paper\|mono\|claude>` | list / switch the material — muse (follows the cover), paper (serif, vermilion ink), mono (monochrome terminal), claude (ivory & clay, a composer card, a ✻ that turns while playing). A bare name works too: `/claude` |
-| `/accent #d8b35f` / `/accent auto` | pin the accent color / back to auto (the cover in muse, the theme's own ink in the others) |
+| `/mode <q>` `/theme <q>` | pick a mode / theme — themes, accents and light/dark keep the menu open so you can flip through them |
+| `/accent #d8b35f` | pin an accent (presets: Clay, Vermilion, Lake, Moss, Plum); *Auto* follows the cover in muse, the theme's own ink elsewhere |
 
 | Key | Action |
 |-----|--------|
@@ -65,7 +63,7 @@ Everything happens in the palette. Type to search; prefix with `/` for commands.
 | `⌘P` / `Space` | play-pause |
 | `Enter` | run the selection |
 | `⌥Enter` | alternate action (usually: start a radio from this song) |
-| `⌘D` | like / unlike the highlighted song |
+| `⌘D` | like / unlike what's playing (`⌘`-click a row to like that song) |
 | `Esc` | clear the input, then hide the window |
 
 ## How it works

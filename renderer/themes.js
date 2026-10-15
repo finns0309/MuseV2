@@ -8,12 +8,14 @@
 // the chameleon; the others are materials with their own ink, so a blue
 // cover can't turn the vermilion stamp, the terminal or the clay blue.
 // A pinned /accent still wins either way.
+//
+// swatch: [paper, ink] — the two colours the /theme menu paints as the row's tile.
 
 export const THEMES = [
-  { id: 'muse',  label: 'muse',  description: 'quiet, airy — follows the cover', followCover: true },
-  { id: 'paper', label: 'paper', description: 'printed matter: serif, vermilion ink', followCover: false },
-  { id: 'mono',  label: 'mono',  description: 'monochrome terminal', followCover: false },
-  { id: 'claude', label: 'claude', description: 'warm ivory, clay, a little spark — the default', followCover: false },
+  { id: 'muse',  label: 'muse',  description: 'quiet, airy — follows the cover', followCover: true,  swatch: ['#f5f5f7', '#007aff'] },
+  { id: 'paper', label: 'paper', description: 'printed matter: serif, vermilion ink', followCover: false, swatch: ['#f2ede3', '#b13b26'] },
+  { id: 'mono',  label: 'mono',  description: 'monochrome terminal', followCover: false, swatch: ['#f6f6f4', '#151515'] },
+  { id: 'claude', label: 'claude', description: 'warm ivory, clay, a little spark — the default', followCover: false, swatch: ['#faf9f5', '#c96442'] },
 ];
 
 export const DEFAULT_THEME = 'claude';

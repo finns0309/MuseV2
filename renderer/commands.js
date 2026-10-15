@@ -1,6 +1,7 @@
-// Command builders. Each is a pure function (query) => Entry[] that produces
-// the list items for a given input. Sync builders run on every keystroke;
-// async builders race against the latest input via store.race('cmdk').
+// What the list shows. buildCommands() is the `/` menu (scopes, submenus,
+// free search over every leaf); SONG_BUILDERS / ASYNC_BUILDERS are bare-text
+// search — sync over the library on every keystroke, async over NetEase,
+// racing the latest input via store.race('cmdk').
 
 import { store, actions } from './store.js';
 import { MODES } from './modes/index.js';
@@ -15,8 +16,8 @@ import { fetchSimilar } from './lib/similar.js';
 import { toggleHeart } from './lib/library.js';
 import { api } from './api.js';
 import * as playlist from './playlist.js';
-import { GLYPH, prefix } from './glyphs.js';
-import { THEMES, byId as themeById, isTheme } from './themes.js';
+import { GLYPH } from './glyphs.js';
+import { THEMES, byId as themeById } from './themes.js';
 
 // ---- Shared entry factories -------------------------------------------------
 
@@ -54,15 +55,17 @@ function sharedActions(track) {
   };
 }
 
-// Structured song row: glyph + name + artist (sub) + duration. `group` tags it
-// for the section header (e.g. "library" / "from netease"); `dim` softens the
-// glyph for cloud hits.
+// Structured song row: cover thumbnail + name (+ ♥ if liked) + artist (sub) +
+// duration. `group` tags it for the section header ("Your library", "From
+// NetEase", "Up next" …); `dim` softens cloud hits that aren't yours yet.
 export function songEntry(track, { glyph = GLYPH.LIKED, dim = false, group } = {}) {
   const isHearted = store.get().library.tracks.some((t) => t.id === track.id);
   return {
     kind: isHearted ? 'library-song' : 'song',
     home: true,          // Enter lands on the keypress; playback catches up (see cmdk.execute)
     glyph, dim, group,
+    cover: track.al?.picUrl || '',
+    liked: isHearted,
     name: track.name || '',
     sub: formatArtists(track) || track.al?.name || '',
     dur: fmtDur(track.dt),
@@ -90,61 +93,319 @@ export function songEntry(track, { glyph = GLYPH.LIKED, dim = false, group } = {
   };
 }
 
-function queueEntry(track, idx, isCurrent) {
+function queueEntry(track, idx, isCurrent, group) {
   return {
+    ...songEntry(track, { group }),
     kind: isCurrent ? 'queue-current' : 'queue-item',
-    home: true,
-    glyph: isCurrent ? GLYPH.PLAYING : GLYPH.QUEUED,
-    name: track.name || '',
-    sub: formatArtists(track) || track.al?.name || '',
-    dur: fmtDur(track.dt),
     run: () => {
-      if (isCurrent) return { home: true };
-      player.playAt(idx);
+      if (!isCurrent) player.playAt(idx);
       return { home: true };
     },
-    ...sharedActions(track),
   };
 }
 
-// ---- List builders ----------------------------------------------------------
+// ---- Command menu -------------------------------------------------------------
+//
+// `/` is a short menu of scopes — Queue, Library, Playlists, Mode, Appearance,
+// Theme, Accent — each one a submenu. A scope is entered by Enter / → / Tab on
+// its row, by typing `/theme ` (cmdk turns the prefix into a chip), or from
+// the session picker; inside it the rest of the input filters its items.
+// Typing after `/` with no scope searches every leaf at once, grouped by the
+// scope it lives in — so `/da` finds Dark and Daily side by side.
+//
+// Menu-row fields (rendered by cmdk.renderList):
+//   icon     key into icons.js        swatch   [paper, ink] colour tile instead
+//   title    main text                desc     muted text right after it
+//   value    right-aligned state      checked  ✓ on the right
+//   submenu  scope id → ›, Enter drills in
+//   group    section header           inert    not runnable (a note, "N more")
 
-function buildQueueEntries(filter, queue, queueIdx) {
-  if (!queue.length) {
-    return [{ kind: 'queue-empty', label: 'queue · empty', hint: 'search for a song first', run: () => ({}) }];
-  }
-  const f = (filter || '').trim().toLowerCase();
-  const out = [];
-  queue.forEach((track, i) => {
-    if (f) {
-      const name = (track.name || '').toLowerCase();
-      const artists = (track.ar || []).map((a) => a.name).join(' ').toLowerCase();
-      if (!name.includes(f) && !artists.includes(f)) return;
-    }
-    out.push(queueEntry(track, i, i === queueIdx));
-  });
-  return out;
+const LISTEN = 'Listen';
+const LOOK = 'Look';
+const LIST_CAP = 150;   // long scopes (library, queue) render this many, then a note
+
+const cap = (t) => { t = String(t || ''); return t.charAt(0).toUpperCase() + t.slice(1); };
+
+const MODE_ICON = {
+  all: 'shuffle', daily: 'calendar', discover: 'compass', digup: 'history',
+  immersive: 'mic', similar: 'sparkle', single: 'repeat1',
+};
+
+// Mid-tone pins that stay legible on both light and dark surfaces.
+const ACCENT_PRESETS = [
+  { name: 'Clay',      hex: '#d97757' },
+  { name: 'Vermilion', hex: '#d0573e' },
+  { name: 'Lake',      hex: '#5b8fd6' },
+  { name: 'Moss',      hex: '#7a9e5f' },
+  { name: 'Plum',      hex: '#a07ab8' },
+];
+
+function matches(filter, ...parts) {
+  const f = normalizeCommand(filter);
+  return !f || parts.some((p) => normalizeCommand(p).includes(f));
 }
 
-function buildLibraryEntries(filter, tracks) {
-  if (!tracks.length) {
-    return [{ kind: 'library-empty', label: 'library · empty', hint: 'like songs on NetEase first', run: () => ({}) }];
+function note(title, desc = '') {
+  return { kind: 'note', icon: 'dot', title, desc, inert: true, run: () => ({}) };
+}
+
+// -- scope items --
+
+function buildQueueEntries(filter) {
+  const { queue, queueIdx } = store.get().player;
+  if (!queue.length) return [note('Nothing queued', 'pick a song or a mode first')];
+  const f = (filter || '').trim().toLowerCase();
+  const hit = (t) => !f || (t.name || '').toLowerCase().includes(f) || formatArtists(t).toLowerCase().includes(f);
+  const out = [];
+  if (queue[queueIdx] && hit(queue[queueIdx])) out.push(queueEntry(queue[queueIdx], queueIdx, true, 'Now playing'));
+  let shown = 0, hidden = 0;
+  for (let i = queueIdx + 1; i < queue.length; i++) {
+    if (!hit(queue[i])) continue;
+    if (shown < LIST_CAP) { out.push(queueEntry(queue[i], i, false, 'Up next')); shown++; } else hidden++;
   }
+  if (hidden) out.push({ ...note(`${hidden} more up next`, 'type to filter'), group: 'Up next' });
+  for (let i = queueIdx - 1, n = 0; i >= 0 && n < 10; i--) {
+    if (!hit(queue[i])) continue;
+    out.push(queueEntry(queue[i], i, false, 'Played'));
+    n++;
+  }
+  return out.length ? out : [note('No matches in the queue')];
+}
+
+function buildLibraryEntries(filter) {
+  const tracks = store.get().library.tracks;
+  if (!tracks.length) return [note('Your library is empty', 'like songs on NetEase first')];
   const f = (filter || '').trim().toLowerCase();
   const sorted = tracks.slice().sort((a, b) =>
     (b.lastPlayedAt || b.addedAt || 0) - (a.lastPlayedAt || a.addedAt || 0)
   );
   const filtered = f
-    ? sorted.filter((t) => {
-        const name = (t.name || '').toLowerCase();
-        const artists = (t.ar || []).map((a) => a.name).join(' ').toLowerCase();
-        return name.includes(f) || artists.includes(f);
-      })
+    ? sorted.filter((t) => (t.name || '').toLowerCase().includes(f) || formatArtists(t).toLowerCase().includes(f))
     : sorted;
-  if (f && !filtered.length) {
-    return [{ kind: 'library-empty', label: 'no matches', hint: '', run: () => ({}) }];
+  if (!filtered.length) return [note('No matches in your library')];
+  const group = f ? 'Matches' : 'Recently played';
+  const out = filtered.slice(0, LIST_CAP).map((t) => songEntry(t, { group }));
+  if (filtered.length > LIST_CAP) out.push({ ...note(`${filtered.length - LIST_CAP} more`, 'type to filter'), group });
+  return out;
+}
+
+function buildPlaylistEntries(filter) {
+  const saved = playlist.getAll();
+  const raw = (filter || '').trim();
+  const plId = playlist.parseId(raw);
+  if (plId) {
+    const existing = saved.find((p) => p.id === plId);
+    return [{
+      kind: 'playlist-load', home: false, icon: 'playlist',
+      title: existing ? existing.name : `Playlist #${plId}`,
+      desc: existing ? `${existing.trackCount} tracks` : 'load and play',
+      run: () => playlist.load(plId),
+    }];
   }
-  return filtered.map((t) => songEntry(t, { glyph: GLYPH.LIKED }));
+  const out = saved
+    .filter((p) => matches(raw, p.name))
+    .map((p) => ({
+      kind: 'playlist-saved', icon: 'playlist', group: 'Saved',
+      title: p.name, desc: `${p.trackCount} tracks`,
+      run: () => playlist.load(p.id),
+    }));
+  out.push({ ...note('Add a playlist', 'paste a NetEase link or ID here'), icon: 'plus' });
+  return out;
+}
+
+function modeLeaves() {
+  const cur = store.get().mode;
+  return MODES.map((m) => ({
+    kind: 'mode', home: true,
+    icon: MODE_ICON[m.id] || 'radio',
+    title: cap(m.label), desc: m.description || '',
+    checked: m.id === cur, keywords: [m.id, 'mode', 'radio'],
+    run: () => { actions.setMode(m.id); return { home: true }; },
+  }));
+}
+
+function appearanceLeaves() {
+  const cur = store.get().appearance.scheme;
+  return ['light', 'dark'].map((scheme) => ({
+    kind: 'appearance',
+    icon: scheme === 'light' ? 'sun' : 'moon',
+    title: cap(scheme), desc: `quiet ${scheme} surface`,
+    checked: scheme === cur, keywords: ['appearance', 'scheme'],
+    run: () => { actions.setAppearanceScheme(scheme); return { ok: `appearance · ${scheme}` }; },
+  }));
+}
+
+function themeLeaves() {
+  const cur = store.get().appearance.theme;
+  return THEMES.map((t) => ({
+    kind: 'theme',
+    swatch: t.swatch,
+    title: cap(t.label), desc: t.description,
+    checked: t.id === cur, keywords: [t.id, 'theme'],
+    run: () => { actions.setTheme(t.id); return { ok: `theme · ${t.label}` }; },
+  }));
+}
+
+function accentLeaves(filter) {
+  const { accent: cur, theme } = store.get().appearance;
+  const followsCover = themeById[theme]?.followCover !== false;
+  const out = [];
+  const hex = (String(filter || '').trim().match(/^#?([0-9a-f]{6})$/i) || [])[1];
+  if (hex) {
+    const h = `#${hex.toLowerCase()}`;
+    out.push({
+      kind: 'accent', swatch: [h, h], title: `Use ${h}`, desc: 'pin this colour',
+      checked: cur === h,
+      run: () => { actions.setAccent(h); return { ok: `accent · ${h}` }; },
+    });
+    return out;
+  }
+  out.push({
+    kind: 'accent', icon: 'droplet', title: 'Auto',
+    desc: followsCover ? 'follow the album cover' : 'the theme’s own ink',
+    checked: !cur, keywords: ['accent', 'auto'],
+    run: () => { actions.setAccent(null); return { ok: 'accent · auto' }; },
+  });
+  for (const p of ACCENT_PRESETS) {
+    out.push({
+      kind: 'accent', swatch: [p.hex, p.hex], title: p.name, desc: p.hex,
+      checked: cur === p.hex, keywords: ['accent', 'color', 'colour'],
+      run: () => { actions.setAccent(p.hex); return { ok: `accent · ${p.name.toLowerCase()}` }; },
+    });
+  }
+  if (cur && !ACCENT_PRESETS.some((p) => p.hex === cur)) {
+    out.splice(1, 0, {
+      kind: 'accent', swatch: [cur, cur], title: 'Pinned', desc: cur, checked: true,
+      run: () => ({ ok: `accent · ${cur}` }),
+    });
+  }
+  out.push({ ...note('Any colour', 'type a hex here, like #d8b35f'), icon: 'plus' });
+  return out;
+}
+
+const filterLeaves = (leaves, f) => leaves.filter((e) => matches(f, e.title, e.desc, ...(e.keywords || [])));
+
+// -- scopes --
+
+const SCOPES = [
+  {
+    id: 'queue', aliases: ['q'], title: 'Queue', icon: 'queue', group: LISTEN,
+    row() {
+      const { queue, queueIdx } = store.get().player;
+      if (!queue.length) return null;
+      const left = Math.max(0, queue.length - (queueIdx + 1));
+      return { desc: left ? `${left} up next` : 'last track', value: sessionTitle() };
+    },
+    items: buildQueueEntries,
+  },
+  {
+    id: 'library', aliases: ['lib'], title: 'Library', icon: 'heart', group: LISTEN,
+    row() {
+      const n = store.get().library.tracks.length;
+      return n ? { desc: `${n} liked songs` } : null;
+    },
+    items: buildLibraryEntries,
+  },
+  {
+    id: 'playlist', aliases: ['pl', 'playlists'], title: 'Playlists', icon: 'playlist', group: LISTEN,
+    row() {
+      const n = playlist.getAll().length;
+      return { desc: n ? `${n} saved` : 'paste a NetEase link' };
+    },
+    items: buildPlaylistEntries,
+  },
+  {
+    id: 'mode', aliases: ['modes', 'radio'], title: 'Mode', icon: 'radio', group: LISTEN,
+    row() {
+      const m = MODES.find((x) => x.id === store.get().mode);
+      return { desc: m?.description || '', value: m ? cap(m.label) : '' };
+    },
+    items: (f) => filterLeaves(modeLeaves(), f),
+    leaves: modeLeaves,
+  },
+  {
+    id: 'appearance', aliases: ['scheme'], title: 'Appearance', icon: 'contrast', group: LOOK,
+    row: () => ({ desc: 'light or dark', value: cap(store.get().appearance.scheme) }),
+    items: (f) => filterLeaves(appearanceLeaves(), f),
+    leaves: appearanceLeaves,
+  },
+  {
+    id: 'theme', aliases: ['themes'], title: 'Theme', icon: 'palette', group: LOOK,
+    row: () => ({ desc: 'the material', value: cap(themeById[store.get().appearance.theme]?.label) }),
+    items: (f) => filterLeaves(themeLeaves(), f),
+    leaves: themeLeaves,
+  },
+  {
+    id: 'accent', aliases: ['color', 'colour'], title: 'Accent', icon: 'droplet', group: LOOK,
+    row() {
+      const { accent: cur } = store.get().appearance;
+      const preset = ACCENT_PRESETS.find((p) => p.hex === cur);
+      return { desc: 'the one colour', value: cur ? (preset?.name || cur) : 'Auto' };
+    },
+    items: (f) => {
+      const all = accentLeaves(f);
+      return /^#?[0-9a-f]{6}$/i.test((f || '').trim()) ? all : filterLeaves(all, f).concat(all.filter((e) => e.inert && f));
+    },
+    leaves: () => accentLeaves('').filter((e) => !e.inert),
+  },
+];
+
+// The session picker and chips talk about the queue the way a model picker
+// talks about a model: "Daily", "Radio · 夜に駆ける".
+function sessionTitle() {
+  const s = store.get().playbackSession;
+  if (!s) return '';
+  const mode = s.kind === 'mode' && MODES.find((m) => m.id === s.modeId);
+  return mode ? cap(mode.label) : cap(describeSession(s));
+}
+
+// `/lib`, `/pl`, `/theme` … → a scope. Exact id or alias, or an unambiguous
+// prefix of at least two letters (so `/the claude` still lands in Theme).
+export function resolveScope(word) {
+  const w = normalizeCommand(word);
+  if (!w) return null;
+  const exact = SCOPES.find((s) => s.id === w || s.aliases.includes(w));
+  if (exact) return { id: exact.id, title: exact.title };
+  if (w.length < 2) return null;
+  const pre = SCOPES.filter((s) => s.id.startsWith(w));
+  return pre.length === 1 ? { id: pre[0].id, title: pre[0].title } : null;
+}
+
+function scopeRow(s) {
+  const r = s.row();
+  if (!r) return null;
+  return { kind: 'scope', icon: s.icon, title: s.title, group: s.group, submenu: s.id, ...r, run: () => ({ scope: s.id }) };
+}
+
+// text: what follows `/` (or the chip). scopeId: the chip, if any.
+export function buildCommands(text, scopeId = null) {
+  let t = String(text || '');
+  if (!scopeId) {
+    const m = t.match(/^(\S+)\s+([\s\S]*)$/);
+    const sc = m && resolveScope(m[1]);
+    if (sc) { scopeId = sc.id; t = m[2]; }
+  }
+  if (scopeId) {
+    const s = SCOPES.find((x) => x.id === scopeId);
+    return s ? s.items(t.trim()) : [];
+  }
+  const q = t.trim();
+  if (!q) return SCOPES.map(scopeRow).filter(Boolean);
+
+  // Free search: matching scope rows, then every matching leaf grouped under
+  // the scope it belongs to.
+  const out = SCOPES
+    .filter((s) => matches(q, s.title, s.id, ...s.aliases))
+    .map(scopeRow).filter(Boolean)
+    .map((r) => ({ ...r, group: 'Menus' }));
+  for (const s of SCOPES) {
+    if (!s.leaves) continue;
+    for (const leaf of filterLeaves(s.leaves(), q)) out.push({ ...leaf, group: s.title });
+  }
+  if (/^#?[0-9a-f]{6}$/i.test(q)) out.push(...accentLeaves(q).map((e) => ({ ...e, group: 'Accent' })));
+  const plId = /^\d{5,}$/.test(q) || /[?&]id=\d+/.test(q) ? playlist.parseId(q) : null;
+  if (plId) out.push(...buildPlaylistEntries(q).map((e) => ({ ...e, group: 'Playlists' })));
+  return out.length ? out : [note('No commands match', 'Esc to clear')];
 }
 
 // ---- Helpers ----------------------------------------------------------------
@@ -157,11 +418,6 @@ function commandMatches(q, parts) {
   if (!q) return true;
   const query = normalizeCommand(q);
   return parts.some((p) => normalizeCommand(p).includes(query));
-}
-
-function parseAccentCommand(q) {
-  const m = String(q || '').trim().match(/^accent\s+(#[0-9a-f]{6}|auto)$/i);
-  return m ? m[1].toLowerCase() : null;
 }
 
 function normalize(s) {
@@ -191,172 +447,10 @@ function scoreLibrary(q, tracks) {
     .sort((a, b) => b.score - a.score);
 }
 
-// ---- Exported builder arrays ------------------------------------------------
-
 // `setInput` is injected by cmdk.js so builders can programmatically fill the
-// search box (e.g. expanding a hint into a full view). Avoids a circular import.
+// search box. Avoids a circular import.
 let setInput = () => {};
 export function injectSetInput(fn) { setInput = fn; }
-
-export const COMMAND_BUILDERS = [
-  // Queue
-  (q) => {
-    const tokens = (q || '').trim().split(/\s+/).filter(Boolean);
-    const head = normalizeCommand(tokens[0] || '');
-    const { queue, queueIdx } = store.get().player;
-    if (head && 'queue'.startsWith(head)) {
-      return buildQueueEntries(tokens.slice(1).join(' '), queue, queueIdx);
-    }
-    if (!queue.length) return [];
-    if (head) return [];
-    const remaining = Math.max(0, queue.length - (queueIdx + 1));
-    return [{
-      kind: 'queue-hint',
-      label: describeSession() + ' · queue',
-      hint: remaining ? `${remaining} up next` : 'last track',
-      run: () => { setInput('/queue'); return {}; },
-    }];
-  },
-  // Library
-  (q) => {
-    const tokens = (q || '').trim().split(/\s+/).filter(Boolean);
-    const head = normalizeCommand(tokens[0] || '');
-    const tracks = store.get().library.tracks;
-    if (head && 'library'.startsWith(head) && !'queue'.startsWith(head)) {
-      return buildLibraryEntries(tokens.slice(1).join(' '), tracks);
-    }
-    if (!tracks.length || head) return [];
-    return [{
-      kind: 'library-hint',
-      label: `library · ${tracks.length} songs`,
-      hint: 'browse liked',
-      run: () => { setInput('/library'); return {}; },
-    }];
-  },
-  // Playlist
-  (q) => {
-    const tokens = (q || '').trim().split(/\s+/).filter(Boolean);
-    const head = normalizeCommand(tokens[0] || '');
-    const saved = playlist.getAll();
-    if (!head || (!'playlist'.startsWith(head) && head !== 'pl')) {
-      if (!head && saved.length) {
-        return [{
-          kind: 'playlist-hint',
-          label: `playlist · ${saved.length} saved`,
-          hint: 'browse playlists',
-          run: () => { setInput('/pl'); return {}; },
-        }];
-      }
-      return [];
-    }
-    const rawArg = tokens.slice(1).join(' ').trim();
-    const plId = playlist.parseId(rawArg);
-    if (plId) {
-      const existing = saved.find((p) => p.id === plId);
-      return [{
-        kind: 'playlist-load',
-        label: existing ? `playlist · ${existing.name}` : `playlist · load #${plId}`,
-        hint: existing ? `${existing.trackCount} tracks · Enter to play` : 'Enter to load & play',
-        run: () => playlist.load(plId),
-      }];
-    }
-    const filter = rawArg.toLowerCase();
-    const filtered = filter ? saved.filter((p) => p.name.toLowerCase().includes(filter)) : saved;
-    const entries = filtered.map((p) => ({
-      kind: 'playlist-saved',
-      label: prefix(GLYPH.PLAYLIST) + p.name,
-      hint: `${p.trackCount} tracks`,
-      run: () => playlist.load(p.id),
-    }));
-    entries.push({
-      kind: 'playlist-add',
-      label: 'playlist · add new',
-      hint: 'paste ID or URL after /pl',
-      run: () => ({ warn: 'usage: /pl <id or URL>' }),
-    });
-    return entries;
-  },
-  // Modes
-  (q) => MODES
-    .filter((m) => commandMatches(q, ['mode', 'radio', m.id, m.label, m.description || '']))
-    .map((m) => ({
-      kind: 'mode',
-      home: true,
-      label: prefix(GLYPH.MODE) + m.label,
-      hint: m.description || '',
-      run: () => { actions.setMode(m.id); return { home: true }; },
-    })),
-  // Appearance
-  (q) => {
-    const out = [];
-    if (commandMatches(q, ['light', 'appearance', 'scheme'])) {
-      out.push({
-        kind: 'appearance',
-        label: 'appearance · light',
-        hint: 'quiet light surface',
-        run: () => { actions.setAppearanceScheme('light'); return { ok: 'appearance · light' }; },
-      });
-    }
-    if (commandMatches(q, ['dark', 'appearance', 'scheme'])) {
-      out.push({
-        kind: 'appearance',
-        label: 'appearance · dark',
-        hint: 'quiet dark surface',
-        run: () => { actions.setAppearanceScheme('dark'); return { ok: 'appearance · dark' }; },
-      });
-    }
-    // /theme, /theme <id> — the material under the scheme (see themes.js).
-    // A bare theme name (/claude, /paper …) is a shortcut for /theme <id>.
-    const tokens = (q || '').trim().split(/\s+/).filter(Boolean);
-    const head = normalizeCommand(tokens[0] || '');
-    const cur = store.get().appearance.theme;
-    const themeEntry = (t) => ({
-      kind: 'theme',
-      label: `theme · ${t.label}`,
-      hint: (t.id === cur ? 'current · ' : '') + t.description,
-      run: () => { actions.setTheme(t.id); return { ok: `theme · ${t.label}` }; },
-    });
-    if (head && 'theme'.startsWith(head)) {
-      const f = normalizeCommand(tokens.slice(1).join(' '));
-      THEMES
-        .filter((t) => !f || normalizeCommand(t.id).includes(f) || normalizeCommand(t.description).includes(f))
-        .forEach((t) => out.push(themeEntry(t)));
-    } else if (tokens.length === 1 && isTheme(head)) {
-      out.push(themeEntry(themeById[head]));
-    } else if (!head || commandMatches(q, ['appearance', 'theme'])) {
-      out.push({
-        kind: 'theme-hint',
-        label: `theme · ${store.get().appearance.theme}`,
-        hint: 'change the material',
-        run: () => { setInput('/theme'); return {}; },
-      });
-    }
-    const accent = parseAccentCommand(q);
-    if (accent === 'auto') {
-      out.push({
-        kind: 'appearance',
-        label: 'appearance · accent auto',
-        hint: themeById[store.get().appearance.theme]?.followCover === false ? 'back to the theme ink' : 'follow the album cover',
-        run: () => { actions.setAccent(null); return { ok: 'accent · auto' }; },
-      });
-    } else if (accent) {
-      out.push({
-        kind: 'appearance',
-        label: 'appearance · accent',
-        hint: accent,
-        run: () => { actions.setAccent(accent); return { ok: `accent · ${accent}` }; },
-      });
-    } else if (commandMatches(q, ['accent', 'color', 'colour'])) {
-      out.push({
-        kind: 'appearance',
-        label: 'appearance · accent #rrggbb | auto',
-        hint: `current ${store.get().appearance.accent || 'auto'}`,
-        run: () => ({ warn: 'usage: /accent #d8b35f · /accent auto' }),
-      });
-    }
-    return out;
-  },
-];
 
 export const SONG_BUILDERS = [
   (q) => {

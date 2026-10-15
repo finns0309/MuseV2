@@ -435,12 +435,26 @@ body[data-theme="claude"][data-scheme="light"] {
   transition: background 320ms ease, border-color 320ms ease;
 }
 .cmdk-input-row {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  display: flex;
   gap: 12px;
   align-items: center;
   padding: 11px 16px 3px 12px;
 }
+.cmdk-input-row .cmdk-input { flex: 1 1 auto; min-width: 0; }
+/* The submenu we're in, as a token in the text line (Backspace removes it). */
+.cmdk-scope {
+  flex: 0 0 auto;
+  margin-right: -4px;
+  padding: 2px 9px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--accent), transparent 86%);
+  color: color-mix(in srgb, var(--accent), var(--fg) 30%);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  white-space: nowrap;
+}
+.cmdk-scope[hidden] { display: none; }
 .cmdk-mark {
   font-family: var(--font-mono);
   font-size: 17px;
@@ -610,32 +624,14 @@ body[data-theme="claude"][data-scheme="light"] {
   justify-content: space-between;
   min-height: 40px;
   align-items: center;
-  gap: 14px;
-  padding: 8px 12px;
+  gap: 12px;
+  padding: 6px 10px;
   border-radius: var(--radius-sm);
   font-size: 13px;
   cursor: pointer;
   color: var(--fg);
   position: relative;
   z-index: 1;
-}
-/* Selection is the gliding cursor, not a per-row background. */
-.cmdk-list li.sel .lbl { color: var(--fg); }
-.cmdk-list .lbl {
-  min-width: 0;
-  color: var(--fg);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.cmdk-list .hint {
-  flex: 0 1 auto;
-  max-width: 45%;
-  color: var(--fg-muted);
-  font-size: 12px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .cmdk-list li.cmdk-empty {
   color: var(--fg-dim);
@@ -680,32 +676,70 @@ body[data-theme="claude"][data-scheme="light"] {
 }
 .cmdk-list li.cmdk-sec .sec-cnt { font-weight: 400; color: var(--fg-dim); font-variant-numeric: tabular-nums; }
 
-/* ---- Structured song row: glyph · name + artist · duration ---- */
-.cmdk-list li.song {
+/* ---- Rows: tile · title  description ……… meta ---- */
+/* One anatomy for both kinds — a song (cover thumb, name, ♥, artist,
+   duration) and a menu item (icon or swatch, title, description, value ✓ ›).
+   The description sits right after the title, not across the window. */
+.cmdk-list li.song,
+.cmdk-list li.menu {
   display: grid;
-  grid-template-columns: 1.1em minmax(0, 1fr) auto;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
   gap: 12px;
 }
-.cmdk-list li.song .gl {
-  color: var(--fg);
-  font-size: 13px;
-  text-align: center;
+.cmdk-list .tile {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  overflow: hidden;
+  border-radius: calc(var(--radius-sm) * 0.6);
+  background: var(--hover-bg-strong);
+  color: var(--fg-muted);
 }
-.cmdk-list li.song.dim .gl { color: var(--fg-dim); }
-.cmdk-list li.song .rowmain {
+.cmdk-list .tile svg { width: 16px; height: 16px; }
+.cmdk-list .tile.thumb {
+  background: color-mix(in srgb, var(--accent), var(--bg) 82%);
+  box-shadow: inset 0 0 0 0.5px var(--line-strong);
+}
+.cmdk-list .tile.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cmdk-list li.song.dim .tile.thumb img { opacity: 0.85; }
+/* Theme / accent rows: the tile is the colour itself — paper with an ink dot. */
+.cmdk-list .tile.swatch {
+  background: var(--sw-bg);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+.cmdk-list .tile.swatch::after {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--sw-ink);
+}
+.cmdk-list .rowmain {
   display: flex;
   align-items: baseline;
-  gap: 9px;
+  gap: 8px;
   min-width: 0;
 }
-.cmdk-list li.song .nm {
+.cmdk-list .nm,
+.cmdk-list .ttl {
+  flex: 0 1 auto;
+  min-width: 0;
   color: var(--fg);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.cmdk-list li.song .nm mark { background: none; color: var(--accent); }
-.cmdk-list li.song .sub {
+.cmdk-list .nm mark,
+.cmdk-list .ttl mark { background: none; color: var(--accent); }
+.cmdk-list .liked {
+  flex: 0 0 auto;
+  margin-left: -3px;
+  font-size: 10px;
+  color: var(--accent);
+}
+.cmdk-list .sub,
+.cmdk-list .dsc {
   flex: 0 1 auto;
   min-width: 0;
   color: var(--fg-muted);
@@ -714,13 +748,40 @@ body[data-theme="claude"][data-scheme="light"] {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.cmdk-list li.song .meta {
+.cmdk-list li.menu.inert { cursor: default; }
+.cmdk-list li.menu.inert .ttl { color: var(--fg-muted); }
+.cmdk-list li.menu.inert .dsc { color: var(--fg-dim); }
+.cmdk-list .meta {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
+  align-items: center;
+  gap: 8px;
   font-variant-numeric: tabular-nums;
 }
-.cmdk-list li.song .meta .dur { color: var(--fg-dim); font-size: 12px; }
+.cmdk-list .meta .dur { color: var(--fg-dim); font-size: 12px; }
+.cmdk-list .meta .val { color: var(--fg-muted); font-size: 12px; }
+.cmdk-list .meta svg { display: block; }
+.cmdk-list .meta .chk { color: var(--accent); }
+.cmdk-list .meta .chk svg { width: 15px; height: 15px; }
+.cmdk-list .meta .chev { color: var(--fg-dim); }
+.cmdk-list .meta .chev svg { width: 14px; height: 14px; }
+/* The selected song says what its keys do instead of how long it is. */
+.cmdk-list .meta .keys { display: none; align-items: center; gap: 5px; font-size: 11.5px; color: var(--fg-muted); }
+.cmdk-list .meta .keys .sep { width: 6px; }
+.cmdk-list li.sel .meta .keys { display: inline-flex; }
+.cmdk-list li.sel .meta:has(.keys) .dur { display: none; }
+.cmdk-list kbd {
+  display: inline-block;
+  min-width: 18px;
+  padding: 1px 5px;
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  background: var(--composer-bg);
+  font-family: var(--font-body);
+  font-size: 11px;
+  line-height: 15px;
+  text-align: center;
+  color: var(--fg-muted);
+}
 
 /* ---- Gliding cursor — accent ring + inner glow ---- */
 .cmdk-cursor {
@@ -981,10 +1042,11 @@ body[data-theme="paper"] .cmdk-list li.cmdk-sec::after {
 body[data-theme="paper"] .cmdk-list li.cmdk-sec .sec-cnt { order: 2; font-variant-numeric: oldstyle-nums; }
 
 body[data-theme="paper"] .cmdk-list li { font-size: 13.5px; }
-body[data-theme="paper"] .cmdk-list li.song .sub,
-body[data-theme="paper"] .cmdk-list .hint { font-style: italic; font-size: 12.5px; }
-body[data-theme="paper"] .cmdk-list li.song .gl { color: var(--accent); font-size: 11px; }
-body[data-theme="paper"] .cmdk-list li.song.dim .gl { color: var(--fg-dim); }
+body[data-theme="paper"] .cmdk-list .sub,
+body[data-theme="paper"] .cmdk-list .dsc { font-style: italic; font-size: 12.5px; }
+body[data-theme="paper"] .cmdk-list .tile:not(.thumb):not(.swatch) { background: none; color: var(--accent); }
+body[data-theme="paper"] .cmdk-list .meta .dur,
+body[data-theme="paper"] .cmdk-list .meta .val { font-variant-numeric: oldstyle-nums tabular-nums; }
 
 /* Cursor: a bookmark ribbon on the left edge over a faint ink wash. */
 body[data-theme="paper"] .cmdk-cursor.commit {
@@ -1002,19 +1064,31 @@ body[data-theme="mono"] .cmdk-cursor {
 body[data-theme="mono"][data-scheme="dark"] .cmdk-cursor { background: color-mix(in srgb, var(--fg) 86%, var(--bg)); }
 body[data-theme="mono"] .cmdk-cursor.commit { background: var(--fg-muted); }
 body[data-theme="mono"] .cmdk-list li.sel,
-body[data-theme="mono"] .cmdk-list li.sel .lbl,
 body[data-theme="mono"] .cmdk-list li.sel .nm,
-body[data-theme="mono"] .cmdk-list li.sel .gl { color: var(--bg); }
+body[data-theme="mono"] .cmdk-list li.sel .ttl,
+body[data-theme="mono"] .cmdk-list li.sel .liked,
+body[data-theme="mono"] .cmdk-list li.sel .tile,
+body[data-theme="mono"] .cmdk-list li.sel .meta .chk,
+body[data-theme="mono"] .cmdk-list li.sel .meta .chev { color: var(--bg); }
 body[data-theme="mono"] .cmdk-list li.sel .sub,
-body[data-theme="mono"] .cmdk-list li.sel .hint,
-body[data-theme="mono"] .cmdk-list li.sel .meta .dur { color: color-mix(in srgb, var(--bg), transparent 35%); }
+body[data-theme="mono"] .cmdk-list li.sel .dsc,
+body[data-theme="mono"] .cmdk-list li.sel .meta .dur,
+body[data-theme="mono"] .cmdk-list li.sel .meta .val,
+body[data-theme="mono"] .cmdk-list li.sel .meta .keys { color: color-mix(in srgb, var(--bg), transparent 35%); }
+body[data-theme="mono"] .cmdk-list li.sel kbd { color: inherit; border-color: currentColor; background: none; }
+body[data-theme="mono"] .cmdk-list li.sel .tile { background: color-mix(in srgb, var(--bg), transparent 85%); }
+body[data-theme="mono"] .cmdk-list .liked,
+body[data-theme="mono"] .cmdk-list .meta .chk { color: var(--fg); }
 
-body[data-theme="mono"] .cmdk-list li { min-height: 34px; padding: 6px 12px; font-size: 12.5px; }
-body[data-theme="mono"] .cmdk-list li.song .sub,
-body[data-theme="mono"] .cmdk-list .hint,
-body[data-theme="mono"] .cmdk-list li.song .meta .dur { font-size: 11.5px; }
+body[data-theme="mono"] .cmdk-list li { min-height: 36px; padding: 4px 10px; font-size: 12.5px; }
+body[data-theme="mono"] .cmdk-list .sub,
+body[data-theme="mono"] .cmdk-list .dsc,
+body[data-theme="mono"] .cmdk-list .meta .dur,
+body[data-theme="mono"] .cmdk-list .meta .val { font-size: 11.5px; }
+body[data-theme="mono"] .cmdk-list .tile { width: 26px; height: 26px; }
 /* Matches are underlined, not coloured — there is no second colour. Drawn
    as a background so .nm's overflow clip can't swallow it. */
+body[data-theme="mono"] .cmdk-list .ttl mark,
 body[data-theme="mono"] .cmdk-list li.song .nm mark {
   color: inherit;
   background: linear-gradient(currentColor, currentColor) no-repeat 0 100% / 100% 1px;
@@ -1101,8 +1175,6 @@ body[data-theme="claude"] .cmdk-now__progress span { opacity: 1; }
 body[data-theme="claude"] .cmdk-now__progress span::after { display: none; }
 body[data-theme="claude"] .cmdk-panel.paused .cmdk-now__progress span { opacity: 0.45; }
 
-body[data-theme="claude"] .cmdk-list li.song .gl { color: var(--accent); font-size: 12px; }
-body[data-theme="claude"] .cmdk-list li.song.dim .gl { color: var(--fg-dim); }
 body[data-theme="claude"] .cmdk-list li.song .nm mark { font-weight: 500; }
 body[data-theme="claude"] .cmdk-cursor.commit {
   background: color-mix(in srgb, var(--accent), transparent 86%);
