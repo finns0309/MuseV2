@@ -6,6 +6,9 @@
 //  · The spark: the composer's ✻ breathes with the music — the spectrum's
 //    loudness, smoothed, lands in --level on the panel and the themes that
 //    want it (claude, muse) scale the mark by it.
+//  · The system: navigator.mediaSession — the keyboard's ⏯ ⏭ keys, AirPods
+//    taps, and Control Center's Now Playing (cover, title, a scrubbable
+//    position, ⏮ ⏭).
 
 import { store } from '../store.js';
 import * as player from '../player.js';
@@ -19,6 +22,7 @@ let lastWritten = -1;
 
 export function mountAmbient(panel) {
   panelEl = panel;
+  mountMediaSession();
 
   store.selectKey(
     (s) => `${s.player.track?.id ?? 0}|${s.player.playing}|${s.appearance.menuBar}`,
@@ -53,6 +57,59 @@ export function mountAmbient(panel) {
     lastWritten = v;
     panelEl.style.setProperty('--level', String(v));
   });
+}
+
+// ---- Now Playing / media keys --------------------------------------------------
+
+function mountMediaSession() {
+  const ms = navigator.mediaSession;
+  if (!ms || typeof MediaMetadata === 'undefined') return;
+  const handlers = {
+    play: () => player.play(),
+    pause: () => player.pause(),
+    previoustrack: () => player.prev(),
+    nexttrack: () => player.next(),
+    seekbackward: (d) => seekBy(-(d?.seekOffset || 10)),
+    seekforward: (d) => seekBy(d?.seekOffset || 10),
+    seekto: (d) => { if (Number.isFinite(d?.seekTime)) player.seek(d.seekTime); },
+  };
+  for (const [action, fn] of Object.entries(handlers)) {
+    try { ms.setActionHandler(action, fn); } catch { /* unsupported action */ }
+  }
+
+  store.selectKey(
+    (s) => `${s.player.track?.id ?? 0}|${s.player.track?.al?.picUrl ?? ''}`,
+    (s) => {
+      const t = s.player.track;
+      if (!t) { ms.metadata = null; return; }
+      // The system fetches artwork itself, so give it the CDN (it can't see
+      // our muse-thumb scheme); 512px is what Control Center draws.
+      const art = t.al?.picUrl ? t.al.picUrl.replace(/^http:/, 'https:') : '';
+      ms.metadata = new MediaMetadata({
+        title: t.name || '',
+        artist: (t.ar || []).map((a) => a.name).join(', '),
+        album: t.al?.name || '',
+        artwork: art ? [{ src: `${art}?param=512y512`, sizes: '512x512', type: 'image/jpeg' }] : [],
+      });
+    }
+  );
+  store.select((s) => !!s.player.playing, (playing) => { ms.playbackState = playing ? 'playing' : 'paused'; });
+  // Position for the Now Playing scrubber — once a second is plenty, the
+  // system extrapolates from playbackRate in between.
+  store.selectKey(
+    (s) => `${s.player.track?.id ?? 0}|${Math.floor(s.player.currentTime)}|${Math.floor(s.player.duration)}`,
+    (s) => {
+      const { duration, currentTime } = s.player;
+      if (!duration || !Number.isFinite(duration)) return;
+      try { ms.setPositionState({ duration, playbackRate: 1, position: Math.min(currentTime || 0, duration) }); } catch {}
+    }
+  );
+}
+
+function seekBy(sec) {
+  const { currentTime, duration } = store.get().player;
+  if (!duration) return;
+  player.seek(Math.max(0, Math.min(duration - 0.5, (currentTime || 0) + sec)));
 }
 
 function clip(s, n) {

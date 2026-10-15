@@ -67,6 +67,8 @@ Everything happens in the palette. Type to search; prefix with `/` for commands.
 | `⌘K` | open palette |
 | `⌘←` / `⌘→` | previous / next |
 | `⌘P` / `Space` | play-pause |
+| `⏯ ⏭ ⏮` keys · AirPods · Control Center | play-pause / next / previous; Control Center's Now Playing shows the cover and a scrubbable position |
+| `←` / `→` (empty input, at home) | back / ahead 10s (`⇧` for 30s); or click / drag the progress bar |
 | `Enter` | run the selection |
 | `⌥Enter` | start a radio from this song |
 | `⌘Enter` / `⇧Enter` | play this song next / add it to the end of the queue — without interrupting what's playing |
