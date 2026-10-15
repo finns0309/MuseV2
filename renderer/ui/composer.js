@@ -11,6 +11,8 @@ import { store, actions } from '../store.js';
 import * as player from '../player.js';
 import { resolveScope } from '../commands.js';
 import { MODES } from '../modes/index.js';
+import { setTimeSession } from '../modes/session.js';
+import * as memory from '../lib/memory.js';
 
 let inputEl, scopeEl, sendEl, heartEl, sessionEl, chipsEl;
 let scope = null;         // { id, title }
@@ -52,9 +54,11 @@ export function mountComposer(root, h) {
     else player.toggle();
   });
   chipsEl.addEventListener('click', (e) => {
+    if (e.target.closest('[data-memory]')) { playOnThisDay(); return; }
     const chip = e.target.closest('[data-mode]');
     if (chip) actions.setMode(chip.dataset.mode);
   });
+  memory.prime().then(() => renderChips(store.get()));
 
   // Why this queue exists — mode / manual / radio / playlist — always visible.
   store.selectKey(
@@ -126,6 +130,16 @@ export function renderSend() {
 function renderChips(s) {
   const active = s.playbackSession?.kind === 'mode' ? s.playbackSession.modeId : null;
   chipsEl.innerHTML = '';
+  // "↺ 3 months ago today" leads the row when your history has that day.
+  const day = memory.onThisDay();
+  if (day) {
+    const b = document.createElement('button');
+    b.className = 'cmdk-chip memory' + (s.playbackSession?.kind === 'memory' ? ' on' : '');
+    b.dataset.memory = '1';
+    b.title = `${day.tracks.length} songs you played that day`;
+    b.textContent = `↺ ${day.label}`;
+    chipsEl.appendChild(b);
+  }
   for (const m of MODES) {
     const b = document.createElement('button');
     b.className = 'cmdk-chip' + (m.id === active ? ' on' : '');
@@ -134,6 +148,13 @@ function renderChips(s) {
     b.textContent = cap(m.label);
     chipsEl.appendChild(b);
   }
+}
+
+function playOnThisDay() {
+  const day = memory.onThisDay();
+  if (!day) return;
+  player.setQueue(day.tracks, { startIdx: 0 });
+  setTimeSession({ kind: 'memory', label: `↺ ${day.label}`, trackCount: day.tracks.length });
 }
 
 // The picker reads like a model name: "Daily", "Radio · 夜に駆ける".

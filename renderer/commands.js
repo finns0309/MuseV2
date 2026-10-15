@@ -11,7 +11,9 @@ import {
   setManualSession,
   setRadioSession,
   setAskSession,
+  setTimeSession,
 } from './modes/session.js';
+import * as memory from './lib/memory.js';
 import * as player from './player.js';
 import { fetchSimilar } from './lib/similar.js';
 import { toggleHeart } from './lib/library.js';
@@ -73,7 +75,7 @@ export function songEntry(track, { glyph = GLYPH.LIKED, dim = false, group } = {
   return {
     kind: isHearted ? 'library-song' : 'song',
     home: true,          // Enter lands on the keypress; playback catches up (see cmdk.execute)
-    glyph, dim, group,
+    glyph, dim, group, track,
     cover: track.al?.picUrl || '',
     liked: isHearted,
     name: track.name || '',
@@ -297,6 +299,37 @@ function accentLeaves(filter) {
   return out;
 }
 
+// Your history as eras: a month each, most-played first — and, when there is
+// one, "N months ago today" on top.
+function playTime(kind, label, tracks) {
+  if (!tracks.length) return { warn: 'nothing there to play' };
+  player.setQueue(tracks, { startIdx: 0 });
+  setTimeSession({ kind, label, trackCount: tracks.length });
+  return { home: true };
+}
+
+function eraLeaves() {
+  const out = [];
+  const day = memory.onThisDay();
+  if (day) {
+    out.push({
+      kind: 'memory', home: true, icon: 'history',
+      title: day.label, desc: `${day.tracks.length} songs you played on ${new Date(day.date).toLocaleDateString('en', { month: 'short', day: 'numeric' })}`,
+      keywords: ['today', 'ago', 'memory', 'era'],
+      run: () => playTime('memory', `↺ ${day.label}`, day.tracks),
+    });
+  }
+  for (const e of memory.eras()) {
+    out.push({
+      kind: 'era', home: true, icon: 'layers',
+      title: e.label, desc: `${e.plays} plays · most: ${e.top}`,
+      keywords: [e.key, 'era', 'month'],
+      run: () => playTime('era', `Era · ${e.label}`, e.tracks()),
+    });
+  }
+  return out;
+}
+
 const filterLeaves = (leaves, f) => leaves.filter((e) => matches(f, e.title, e.desc, ...(e.keywords || [])));
 
 // -- scopes --
@@ -327,6 +360,15 @@ const SCOPES = [
       return { desc: n ? `${n} saved` : 'paste a NetEase link' };
     },
     items: buildPlaylistEntries,
+  },
+  {
+    id: 'era', aliases: ['eras', 'month', 'months', 'history'], title: 'Eras', icon: 'layers', group: LISTEN,
+    row() {
+      const n = memory.eras().length;
+      return n ? { desc: `${n} months of your listening` } : null;
+    },
+    items: (f) => filterLeaves(eraLeaves(), f),
+    leaves: eraLeaves,
   },
   {
     id: 'mode', aliases: ['modes', 'radio'], title: 'Mode', icon: 'radio', group: LISTEN,

@@ -10,23 +10,15 @@
 // so everything the model could ask for is already in the one prompt.
 
 import { store } from '../store.js';
+import { loadHistory } from './memory.js';
 
 const EXTRA_RECENT = 300;   // non-library songs from history offered as candidates
 const TIMELINE_MONTHS = 6;
 const TIMELINE_TOP = 15;
-let history = null;
-let historyAt = 0;
 
 const artists = (t) => (t.ar || []).map((a) => a.name).join('/');
 const yymm = (ms) => { const d = new Date(ms); return `${String(d.getFullYear()).slice(2)}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
 const ym = (ms) => { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
-
-async function loadHistory() {
-  if (history && Date.now() - historyAt < 60_000) return history;
-  history = (await window.muse.store.get('history', [])) || [];
-  historyAt = Date.now();
-  return history;
-}
 
 export async function available() {
   try { return !!(await window.muse.llm?.available()); } catch { return false; }

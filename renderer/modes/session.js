@@ -8,6 +8,8 @@ import { store } from '../store.js';
 import { byId } from './index.js';
 
 const DEFAULT_EXTEND_LIMIT = 40;
+// Sessions whose queue is the whole story — nothing extends them at the end.
+const FINITE_SESSIONS = new Set(['manual', 'playlist', 'ask', 'era', 'memory']);
 
 export function setModeSession(modeId) {
   const mode = byId[modeId] || byId.all;
@@ -70,6 +72,14 @@ export function setAskSession({ prompt, title, trackCount }) {
   });
 }
 
+// A queue cut from your own history — an era (a month, most-played first) or
+// "N months ago today". Ends when it ends.
+export function setTimeSession({ kind, label, trackCount }) {
+  store.set({
+    playbackSession: { kind, label, trackCount: trackCount || 0, startedAt: Date.now() },
+  });
+}
+
 export function describeSession(session = store.get().playbackSession) {
   return session?.label || 'queue';
 }
@@ -114,7 +124,7 @@ export async function extendQueueForCurrentSession({ limit = DEFAULT_EXTEND_LIMI
   const session = state.playbackSession;
   const current = state.player.track;
 
-  if (!session || session.kind === 'manual' || session.kind === 'playlist' || session.kind === 'ask') return [];
+  if (!session || FINITE_SESSIONS.has(session.kind)) return [];
 
   const modeId = session.kind === 'radio' ? 'similar' : session.modeId;
   const mode = byId[modeId] || byId.all;

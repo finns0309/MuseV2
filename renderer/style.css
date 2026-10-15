@@ -586,16 +586,23 @@ body[data-theme="claude"][data-scheme="light"] {
 .cmdk-panel.idle .cmdk-greeting:not([hidden]) {
   flex: 1 1 auto;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 10px;
   padding: 0 32px 8px;
+  -webkit-app-region: drag;
+}
+.cmdk-greeting__line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   font-family: var(--font-title);
   font-size: 30px;
   letter-spacing: -0.4px;
   color: var(--fg);
-  -webkit-app-region: drag;
 }
+.cmdk-greeting__sub { font-size: 13px; color: var(--fg-muted); }
 .cmdk-greeting__spark::before {
   content: '✻';
   font-family: var(--font-body);
@@ -853,6 +860,46 @@ body[data-theme="claude"][data-scheme="light"] {
 }
 .cmdk-list li.answer .meta .acts { display: inline-flex; }
 
+/* ---- ⌘I — the selected song's card beside the list ---- */
+.cmdk-list-wrap.with-info .cmdk-list { margin-right: 236px; }
+.cmdk-info {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  bottom: 6px;
+  z-index: 2;
+  width: 222px;
+  padding: 14px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--composer-bg);
+}
+.cmdk-info[hidden], .cmdk-panel.idle .cmdk-info { display: none; }
+.cmdk-info .info-cover {
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--hover-bg-strong);
+  box-shadow: var(--shadow-cover);
+}
+.cmdk-info .info-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cmdk-info .info-title { margin-top: 12px; font-family: var(--font-title); font-size: 16px; line-height: 1.3; }
+.cmdk-info .info-artist { margin-top: 3px; font-size: 12.5px; color: var(--fg-muted); }
+.cmdk-info .info-album { margin-top: 2px; font-size: 12px; color: var(--fg-dim); }
+.cmdk-info .info-facts {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 7px 12px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+}
+.cmdk-info dt { color: var(--fg-dim); }
+.cmdk-info dd { text-align: right; color: var(--fg); font-variant-numeric: tabular-nums; }
+.cmdk-info .info-empty { padding-top: 40%; text-align: center; font-size: 12.5px; color: var(--fg-dim); }
+
 /* ---- Key legend — what the keys do for the selected row (search only) ---- */
 .cmdk-keys {
   position: relative;
@@ -973,6 +1020,17 @@ body[data-theme="claude"][data-scheme="light"] {
 .cmdk-panel.idle .cmdk-now__artist { margin-top: 5px; font-size: 13px; }
 .cmdk-panel.idle .cmdk-now__progress-row { width: min(280px, 100%); margin: 6px auto 0; }
 .cmdk-panel.idle .cmdk-now__progress span::after { opacity: 0.6; }
+/* The song's story with you — idle only; the search strip has no room. */
+.cmdk-now__context { display: none; }
+.cmdk-panel.idle .cmdk-now__context:not(:empty) {
+  display: block;
+  margin-top: 9px;
+  font-size: 12px;
+  color: var(--fg-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .cmdk-panel.idle .cmdk-composer { margin: 0 14px 12px; }
 /* At home the bottom edge belongs to the chips: float the toast just above
    the composer instead (composer 80 + 12 gap + chips 42). */

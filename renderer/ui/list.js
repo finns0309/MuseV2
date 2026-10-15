@@ -12,6 +12,7 @@ let cursorEl = null;
 let keysEl = null;
 let onExecute = () => {};
 let inScope = () => false;
+let onCursor = () => {};
 
 let entries = [];
 let rowEls = [];          // selectable row <li>s, parallel to entries (excludes section headers)
@@ -19,12 +20,13 @@ let cursor = 0;
 let query = '';           // highlighted in titles
 let introPending = false; // the first render after opening staggers its rows in
 
-export function mountList({ list, cursor: cur, keys, execute, scoped }) {
+export function mountList({ list, cursor: cur, keys, execute, scoped, cursorChanged }) {
   listEl = list;
   cursorEl = cur;
   keysEl = keys;
   onExecute = execute;
   inScope = scoped || inScope;
+  onCursor = cursorChanged || onCursor;
   listEl.addEventListener('scroll', () => seat(true), { passive: true });
 }
 
@@ -286,6 +288,7 @@ export function setCursor(i) {
 // — the only place ⌘↵ / ⇧↵ / ⌥↑↓ are written down.
 
 function renderKeys() {
+  onCursor(entries[cursor]);
   if (!keysEl) return;
   const e = entries[cursor];
   const back = inScope() ? [['⌫', 'Back']] : [];
@@ -293,8 +296,8 @@ function renderKeys() {
   if (!e || e.inert) keys = back;
   else if (e.submenu) keys = [['↵', 'Open'], ['⇥', 'Open'], ...back];
   else if (e.kind === 'answer') keys = e.count ? [['↵', 'Play all'], ['⌘↵', 'Next'], ['⇧↵', 'Queue'], ['⌥↵', 'Try again']] : [['↵', 'Try again']];
-  else if (e.moveRun) keys = [['↵', 'Play'], ['⌘↵', 'Next'], ['⌥↑↓', 'Move'], ['⌘⌫', 'Remove'], ...back];
-  else if (e.name !== undefined) keys = [['↵', 'Play'], ['⌘↵', 'Next'], ['⇧↵', 'Queue'], ['⌥↵', 'Radio'], ...back];
+  else if (e.moveRun) keys = [['↵', 'Play'], ['⌘↵', 'Next'], ['⌥↑↓', 'Move'], ['⌘⌫', 'Remove'], ['⌘I', 'Info'], ...back];
+  else if (e.name !== undefined) keys = [['↵', 'Play'], ['⌘↵', 'Next'], ['⇧↵', 'Queue'], ['⌥↵', 'Radio'], ['⌘I', 'Info'], ...back];
   else keys = [['↵', 'Choose'], ...back];
   keysEl.innerHTML = keys.map(([k, label]) => `<span><kbd>${k}</kbd>${label}</span>`).join('');
 }

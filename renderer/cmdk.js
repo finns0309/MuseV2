@@ -25,6 +25,8 @@ import * as hero from './ui/hero.js';
 import * as composer from './ui/composer.js';
 import * as list from './ui/list.js';
 import * as toast from './ui/toast.js';
+import * as info from './ui/info.js';
+import * as memory from './lib/memory.js';
 
 // ---- State ------------------------------------------------------------------
 
@@ -80,8 +82,11 @@ export function mount(el) {
     <div class="cmdk-panel">
       <div class="cmdk-ambient" data-role="ambient" aria-hidden="true"></div>
       <div class="cmdk-greeting" data-role="greeting">
-        <span class="cmdk-greeting__spark" aria-hidden="true"></span>
-        <span data-role="greeting-text"></span>
+        <div class="cmdk-greeting__line">
+          <span class="cmdk-greeting__spark" aria-hidden="true"></span>
+          <span data-role="greeting-text"></span>
+        </div>
+        <div class="cmdk-greeting__sub" data-role="greeting-sub"></div>
       </div>
       <div class="cmdk-now" data-role="now" hidden>
         <div class="cmdk-now__cover" data-role="now-cover"></div>
@@ -92,6 +97,7 @@ export function mount(el) {
             <div class="cmdk-now__progress"><span data-role="now-progress"></span></div>
             <div class="cmdk-now__time" data-role="now-time">0:00</div>
           </div>
+          <div class="cmdk-now__context" data-role="now-context"></div>
         </div>
       </div>
       <div class="cmdk-composer">
@@ -139,7 +145,10 @@ export function mount(el) {
     keys: rootEl.querySelector('[data-role=keys]'),
     execute,
     scoped: () => !!composer.getScope(),
+    cursorChanged: (entry) => info.show(entry),
   });
+  info.mountInfo(rootEl.querySelector('.cmdk-list-wrap'));
+  memory.prime();
 
   // Subsystems
   askLib.available().then((on) => { askEnabled = on; });
@@ -162,6 +171,16 @@ export function mount(el) {
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'd') {
       e.preventDefault();
       toggleCurrent();
+      return;
+    }
+    // ⌘I — the selected song's story beside the list. At home there's no
+    // list, so it opens the queue with what's playing selected.
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'i') {
+      e.preventDefault();
+      if (panelEl.classList.contains('idle') && !inputEl.value) {
+        composer.enterScope('queue');
+        info.setOpen(true, list.current());
+      } else info.setOpen(!info.isOpen(), list.current());
       return;
     }
     if (e.key === 'Escape' && store.get().cmdkOpen) {
