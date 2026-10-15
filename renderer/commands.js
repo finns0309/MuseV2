@@ -16,7 +16,7 @@ import { toggleHeart } from './lib/library.js';
 import { api } from './api.js';
 import * as playlist from './playlist.js';
 import { GLYPH, prefix } from './glyphs.js';
-import { THEMES, byId as themeById } from './themes.js';
+import { THEMES, byId as themeById, isTheme } from './themes.js';
 
 // ---- Shared entry factories -------------------------------------------------
 
@@ -305,20 +305,24 @@ export const COMMAND_BUILDERS = [
         run: () => { actions.setAppearanceScheme('dark'); return { ok: 'appearance · dark' }; },
       });
     }
-    // /theme, /theme <id> — the material under the scheme (see themes.js)
+    // /theme, /theme <id> — the material under the scheme (see themes.js).
+    // A bare theme name (/claude, /paper …) is a shortcut for /theme <id>.
     const tokens = (q || '').trim().split(/\s+/).filter(Boolean);
     const head = normalizeCommand(tokens[0] || '');
+    const cur = store.get().appearance.theme;
+    const themeEntry = (t) => ({
+      kind: 'theme',
+      label: `theme · ${t.label}`,
+      hint: (t.id === cur ? 'current · ' : '') + t.description,
+      run: () => { actions.setTheme(t.id); return { ok: `theme · ${t.label}` }; },
+    });
     if (head && 'theme'.startsWith(head)) {
       const f = normalizeCommand(tokens.slice(1).join(' '));
-      const cur = store.get().appearance.theme;
       THEMES
         .filter((t) => !f || normalizeCommand(t.id).includes(f) || normalizeCommand(t.description).includes(f))
-        .forEach((t) => out.push({
-          kind: 'theme',
-          label: `theme · ${t.label}`,
-          hint: (t.id === cur ? 'current · ' : '') + t.description,
-          run: () => { actions.setTheme(t.id); return { ok: `theme · ${t.label}` }; },
-        }));
+        .forEach((t) => out.push(themeEntry(t)));
+    } else if (tokens.length === 1 && isTheme(head)) {
+      out.push(themeEntry(themeById[head]));
     } else if (!head || commandMatches(q, ['appearance', 'theme'])) {
       out.push({
         kind: 'theme-hint',

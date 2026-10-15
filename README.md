@@ -44,8 +44,8 @@ Everything happens in the palette. Type to search; prefix with `/` for commands.
 | `/pl <id or url>` | load a NetEase playlist and remember it |
 | `/mode`, `/daily`, `/discover`, … | switch listening mode |
 | `/light` `/dark` | appearance |
-| `/theme` `/theme <muse\|paper\|mono>` | list / switch the material — muse (follows the cover), paper (serif, vermilion ink), mono (monochrome terminal) |
-| `/accent #d8b35f` / `/accent auto` | pin the accent color / back to auto (the cover in muse, the theme's own ink in paper & mono) |
+| `/theme` `/theme <muse\|paper\|mono\|claude>` | list / switch the material — muse (follows the cover), paper (serif, vermilion ink), mono (monochrome terminal), claude (ivory & clay, a composer card, a ✻ that turns while playing). A bare name works too: `/claude` |
+| `/accent #d8b35f` / `/accent auto` | pin the accent color / back to auto (the cover in muse, the theme's own ink in the others) |
 
 | Key | Action |
 |-----|--------|
