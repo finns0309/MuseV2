@@ -781,6 +781,78 @@ body[data-theme="claude"][data-scheme="light"] {
 .cmdk-list .act:hover { background: var(--hover-bg-strong); color: var(--fg); }
 .cmdk-list .act.on { color: var(--accent); }
 
+/* ---- Ask ---- */
+/* The Ask row's tile is the spark itself. */
+.cmdk-list .tile.spark::before {
+  content: '✻';
+  font-size: 15px;
+  color: var(--accent);
+}
+/* Your request, echoed as a chat bubble on the right. */
+.cmdk-list li.cmdk-prompt {
+  justify-content: flex-end;
+  min-height: 0;
+  padding: 10px 10px 4px;
+  cursor: default;
+}
+.cmdk-prompt .bubble {
+  max-width: 72%;
+  padding: 7px 13px;
+  border-radius: 15px 15px 4px 15px;
+  background: var(--hover-bg-strong);
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+/* The answer: a playlist-ish card — cover mosaic, ✻ title, the DJ's line. */
+.cmdk-list li.answer {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  min-height: 72px;
+  padding: 10px;
+}
+.cmdk-list .mosaic {
+  display: grid;
+  grid-template: 1fr 1fr / 1fr 1fr;
+  width: 52px;
+  height: 52px;
+  overflow: hidden;
+  border-radius: calc(var(--radius-sm) * 0.8);
+  background: var(--hover-bg-strong);
+  box-shadow: var(--shadow-cover);
+}
+.cmdk-list .mosaic img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cmdk-list .mosaic:not([data-n="4"]) img:first-child { grid-area: 1 / 1 / 3 / 3; }
+.cmdk-list .mosaic:not([data-n="4"]) img:not(:first-child) { display: none; }
+.cmdk-list .mosaic.empty { display: grid; place-items: center; box-shadow: none; }
+.cmdk-list .mosaic.empty::before { content: '✻'; font-size: 20px; color: var(--accent); }
+.cmdk-list .ans { min-width: 0; }
+.cmdk-list .ans-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.cmdk-list .ans-title {
+  min-width: 0;
+  font-family: var(--font-title);
+  font-size: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cmdk-list .ans-count { flex: 0 0 auto; font-size: 12px; color: var(--fg-dim); }
+.cmdk-list .ans-reply {
+  margin-top: 3px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--fg-muted);
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.cmdk-list li.answer .meta .acts { display: inline-flex; }
+
 /* ---- Key legend — what the keys do for the selected row (search only) ---- */
 .cmdk-keys {
   position: relative;
@@ -1107,6 +1179,9 @@ body[data-theme="mono"] .cmdk-list li.sel .meta .val,
 body[data-theme="mono"] .cmdk-list li.sel .meta .keys { color: color-mix(in srgb, var(--bg), transparent 35%); }
 body[data-theme="mono"] .cmdk-list li.sel kbd { color: inherit; border-color: currentColor; background: none; }
 body[data-theme="mono"] .cmdk-list li.sel .act { color: color-mix(in srgb, var(--bg), transparent 25%); }
+body[data-theme="mono"] .cmdk-list li.sel .ans-title { color: var(--bg); }
+body[data-theme="mono"] .cmdk-list li.sel .ans-reply,
+body[data-theme="mono"] .cmdk-list li.sel .ans-count { color: color-mix(in srgb, var(--bg), transparent 30%); }
 body[data-theme="mono"] .cmdk-list li.sel .act:hover { color: var(--bg); background: color-mix(in srgb, var(--bg), transparent 85%); }
 body[data-theme="mono"] .cmdk-list li.sel .tile { background: color-mix(in srgb, var(--bg), transparent 85%); }
 body[data-theme="mono"] .cmdk-list .liked,

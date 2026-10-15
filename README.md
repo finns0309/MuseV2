@@ -47,7 +47,8 @@ Everything happens in the palette. Type to search; prefix with `/` for commands.
 
 | Input | Does |
 |-------|------|
-| `<query>` | search your library (and NetEase cloud at ≥2 chars) |
+| `<query>` | search your library (and NetEase cloud at ≥2 chars). An **Ask Muse** row offers the query to the DJ — on top when it reads like a request |
+| `?<request>` | ask the DJ directly: *下雨天，安静点的* · *八月份我循环最多的那些* · *像这首但人声少一点*. It answers with a titled queue from your own listening; `↵` play all · `⌘↵` next · `⇧↵` queue · `⌥↵` try again |
 | `/` | the menu: **Listen** — Queue, Library, Playlists, Mode · **Look** — Appearance, Theme, Accent. Each shows its current value; `Enter` / `→` / `Tab` opens it as a chip in the input, `Backspace` at the start closes it |
 | `/<words>` | search every command at once, grouped by menu (`/da` → Daily, Dark; `/claude` → the theme) |
 | `/queue <q>` `/lib <q>` | filter the queue (Now playing · Up next · Played) or your library |
@@ -67,6 +68,27 @@ Everything happens in the palette. Type to search; prefix with `/` for commands.
 | `⌥↑` `⌥↓` · `⌘⌫` | in `/queue`: move the selected song · remove it (with an empty input) |
 | `⌘D` | like / unlike what's playing (`⌘`-click a row to like that song) |
 | `Esc` | clear the input, then hide the window |
+
+### Ask (the DJ)
+
+Ask sends one request to an OpenAI-compatible **Responses API** endpoint
+from the main process — the key never reaches the renderer. Configure it in
+`~/Library/Application Support/MuseV2/llm.json` (never in the repo):
+
+```json
+{
+  "base_url": "https://…",
+  "model": "gpt-6-luna",
+  "fallback_models": ["gpt-5.6-luna", "gpt-6"],
+  "api_key": "sk-…"
+}
+```
+
+If the model isn't served, the fallbacks are tried in order. The prompt
+carries a compact index of your library plus songs you've played lately, a
+per-month most-played timeline, and what's playing — one call, no tool loop,
+because each round trip on these endpoints costs 10–20s. Without `llm.json`
+the Ask row simply doesn't appear.
 
 ## How it works
 

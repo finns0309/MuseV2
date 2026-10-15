@@ -17,7 +17,8 @@ import { store, actions } from './store.js';
 import * as accent from './accent.js';
 import * as playlist from './playlist.js';
 import * as tx from './transitions.js';
-import { buildCommands, resolveScope, SONG_BUILDERS, ASYNC_BUILDERS, injectSetInput } from './commands.js';
+import { buildCommands, resolveScope, SONG_BUILDERS, ASYNC_BUILDERS, injectSetInput, askEntry, answerEntries } from './commands.js';
+import * as askLib from './lib/ask.js';
 import { GLYPH } from './glyphs.js';
 import { toggleHeart } from './lib/library.js';
 import * as hero from './ui/hero.js';
@@ -32,6 +33,10 @@ let composing = false;    // IME composition in progress
 let idleTimer = null;     // staged search → idle transition
 let idleSeq = 0;          // invalidates an in-flight staged transition
 let landing = false;      // Enter → home choreography owns the now-area for a moment
+let askEnabled = false;   // llm.json present (main process) — otherwise no Ask row
+let answer = null;        // { q, status: 'thinking'|'done'|'error', phase, result, error }
+let askSeq = 0;           // invalidates an in-flight Ask
+let phaseTimer = null;
 
 // ---- Window resize ----------------------------------------------------------
 
@@ -137,6 +142,7 @@ export function mount(el) {
   });
 
   // Subsystems
+  askLib.available().then((on) => { askEnabled = on; });
   accent.init(rootEl.querySelector('[data-role=ambient]'));
   playlist.boot();
   injectSetInput((v) => { inputEl.value = v; refresh(); });
@@ -213,16 +219,37 @@ function refresh({ keepCursor = false } = {}) {
   }
   const scope = composer.getScope();
   const raw = inputEl.value.trim();
+
+  // An Ask in flight or answered owns the list until the text changes.
+  if (answer && (scope || raw !== answer.q)) cancelAsk();
+  if (answer) {
+    renderAnswer({ keepCursor });
+    composer.renderSend();
+    setIdle(false);
+    searchCtrl?.abort();
+    return;
+  }
+
   const isCmd = !!scope || raw.startsWith('/');
-  const q = scope ? raw : isCmd ? raw.slice(1).trim() : raw;
+  const isAsk = !isCmd && raw.startsWith('?');          // `?…` goes straight to the DJ
+  const q = scope ? raw : isCmd || isAsk ? raw.slice(1).trim() : raw;
 
   let entries;
-  if (isCmd)     entries = buildCommands(scope ? raw : raw.slice(1), scope?.id);
-  else if (!q)   entries = [];
-  else           entries = SONG_BUILDERS.flatMap((b) => b(q));
+  if (isCmd)       entries = buildCommands(scope ? raw : raw.slice(1), scope?.id);
+  else if (isAsk)  entries = askEnabled && q ? [askEntry(q)] : [];
+  else if (!q)     entries = [];
+  else {
+    entries = SONG_BUILDERS.flatMap((b) => b(q));
+    // Ask sits above the results when the query reads like a request (or
+    // nothing matched), below them when it reads like a title.
+    if (askEnabled && q.length >= 2) {
+      if (askLib.looksLikeAsk(q) || !entries.length) entries.unshift(askEntry(q));
+      else entries.push(askEntry(q));
+    }
+  }
 
   const view = { query: q, emptyText: raw ? 'No matches' : '' };
-  list.render(entries, { ...view, thinking: !isCmd && !!q, keepCursor });
+  list.render(entries, { ...view, thinking: !isCmd && !isAsk && !!q, keepCursor });
   composer.renderSend();
 
   setIdle(!raw && !scope);
@@ -230,7 +257,7 @@ function refresh({ keepCursor = false } = {}) {
   searchCtrl?.abort();
   searchCtrl = new AbortController();
   const ok = store.race('cmdk');
-  if (isCmd || !q) return;
+  if (isCmd || isAsk || !q) return;
 
   let pending = ASYNC_BUILDERS.length;
   const settle = () => {
@@ -242,6 +269,51 @@ function refresh({ keepCursor = false } = {}) {
       .catch(() => {})
       .finally(settle);
   }
+}
+
+// ---- Ask ---------------------------------------------------------------------
+//
+// Enter on the Ask row (or `?…`) sends the request to the DJ. The list turns
+// into a tiny conversation: your request as a bubble, a turning spark with a
+// status line while it thinks (10–20s on this endpoint), then the answer card
+// and its songs. Editing the text or Esc abandons it.
+
+const PHASES = ['Reading your library…', 'Looking back through your months…', 'Picking songs…', 'Putting them in order…'];
+
+function startAsk(q, { again = false } = {}) {
+  const avoid = again && answer?.result ? answer.result.tracks.map((t) => t.id) : [];
+  const seq = ++askSeq;
+  composer.setScope(null);
+  inputEl.value = q;
+  answer = { q, status: 'thinking', phase: 0 };
+  clearInterval(phaseTimer);
+  phaseTimer = setInterval(() => {
+    if (answer?.status !== 'thinking') return;
+    answer.phase = Math.min(answer.phase + 1, PHASES.length - 1);
+    renderAnswer();
+  }, 3200);
+  refresh();
+  askLib.ask(q, { avoid }).then(
+    (result) => { if (seq === askSeq) finishAsk({ q, status: 'done', result }); },
+    (err) => { if (seq === askSeq) finishAsk({ q, status: 'error', error: err?.message || String(err) }); },
+  );
+}
+
+function finishAsk(next) {
+  clearInterval(phaseTimer);
+  answer = next;
+  refresh();
+}
+
+function cancelAsk() {
+  askSeq++;
+  clearInterval(phaseTimer);
+  answer = null;
+}
+
+function renderAnswer(opts = {}) {
+  if (answer.status === 'thinking') list.render([], { prompt: answer.q, thinking: PHASES[answer.phase] });
+  else list.render(answerEntries(answer), { prompt: answer.q, ...opts });
 }
 
 // ---- idle ⇄ search morph ------------------------------------------------------
@@ -374,12 +446,13 @@ function execute(i, variant = 'primary') {
   // stream URL) — the store's now-playing catches up and the hero pops when
   // it does. Handlers may also *return* { home } once they know the outcome.
   // Queue edits and likes never land: you're still choosing.
-  const landedEarly = !!entry.home && (handler === entry.run || variant === 'alt');
+  const landedEarly = !!entry.home && (handler === entry.run || (variant === 'alt' && entry.name !== undefined));
   if (landedEarly) land();
   Promise.resolve()
     .then(() => handler())
     .then((res) => {
       if (res?.scope) { composer.enterScope(res.scope); return; }
+      if (res?.ask) { startAsk(res.ask, { again: !!res.again }); return; }
       if (res?.ok) toast.show(res.ok, 'ok');
       if (res?.warn) toast.show(res.warn, 'warn');
       if (res?.home && !landedEarly) land();

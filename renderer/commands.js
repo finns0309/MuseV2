@@ -10,6 +10,7 @@ import {
   describeSession,
   setManualSession,
   setRadioSession,
+  setAskSession,
 } from './modes/session.js';
 import * as player from './player.js';
 import { fetchSimilar } from './lib/similar.js';
@@ -458,6 +459,58 @@ function scoreLibrary(q, tracks) {
     })
     .filter(Boolean)
     .sort((a, b) => b.score - a.score);
+}
+
+// ---- Ask ---------------------------------------------------------------------
+
+// The row that sends a bare query to the DJ (lib/ask.js). cmdk puts it above
+// the search results when the query reads like a request, below otherwise.
+export function askEntry(q) {
+  return {
+    kind: 'ask', icon: 'spark', group: 'Ask Muse',
+    title: `“${q}”`, desc: 'a queue from what you’ve been listening to',
+    run: () => ({ ask: q }),
+  };
+}
+
+// The answer: a card (↵ play all · ⌘↵ next · ⇧↵ queue · ⌥↵ try again) and
+// its songs, each of which plays the whole answer starting there.
+export function answerEntries({ q, result, error }) {
+  if (error || !result?.tracks.length) {
+    return [{
+      kind: 'answer', icon: 'spark',
+      title: error ? 'Couldn’t ask' : (result?.title || 'Nothing fit'),
+      reply: error || result?.reply || 'Nothing in your listening fits that — try saying it differently.',
+      covers: [], count: 0,
+      run: () => ({ ask: q, again: !error }),
+      altRun: () => ({ ask: q, again: !error }),
+    }];
+  }
+  const { tracks, title } = result;
+  const play = (k) => {
+    player.setQueue(tracks, { startIdx: k });
+    setAskSession({ prompt: q, title, trackCount: tracks.length });
+    return { home: true };
+  };
+  const card = {
+    kind: 'answer', home: true,
+    title, reply: result.reply, count: tracks.length,
+    covers: tracks.slice(0, 4).map((t) => t.al?.picUrl).filter(Boolean),
+    run: () => play(0),
+    nextRun: () => {
+      if (!store.get().player.track) return play(0);
+      for (const t of [...tracks].reverse()) player.playNext(t);
+      return { ok: `${title} · plays next` };
+    },
+    queueRun: () => {
+      if (!store.get().player.track) return play(0);
+      for (const t of tracks) player.enqueue(t);
+      return { ok: `${title} · added to the queue` };
+    },
+    altRun: () => ({ ask: q, again: true }),
+  };
+  const songs = tracks.map((t, k) => ({ ...songEntry(t, { group: title }), run: () => play(k) }));
+  return [card, ...songs];
 }
 
 // `setInput` is injected by cmdk.js so builders can programmatically fill the

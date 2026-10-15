@@ -35,14 +35,17 @@ export function armIntro() { introPending = true; }
 
 // Render `next`. keepCursor holds the selection where it was (a menu choice
 // re-rendering its ✓, cloud results arriving under a moved cursor).
-export function render(next, { query: q = '', thinking = false, emptyText = '', keepCursor = false } = {}) {
+// thinking: true (cloud search) or the status line to show ("Picking songs…").
+// prompt: the request echoed as a speech bubble above everything (Ask).
+export function render(next, { query: q = '', thinking = false, emptyText = '', keepCursor = false, prompt = '' } = {}) {
   entries = next;
   query = q;
   cursor = keepCursor ? Math.min(cursor, Math.max(0, entries.length - 1)) : 0;
   listEl.innerHTML = '';
   rowEls = [];
+  if (prompt) listEl.appendChild(promptRow(prompt));
   if (!entries.length) {
-    if (thinking) listEl.appendChild(thinkingRow());
+    if (thinking) listEl.appendChild(thinkingRow(thinking));
     else if (emptyText) {
       const li = document.createElement('li');
       li.className = 'cmdk-empty';
@@ -84,6 +87,7 @@ export function render(next, { query: q = '', thinking = false, emptyText = '', 
     if (intro) { li.classList.add('in'); li.style.animationDelay = `${Math.min(i, 10) * 24}ms`; }
 
     if (e.name !== undefined) songRow(li, e, mixed[e.group] ?? false, i);
+    else if (e.kind === 'answer') answerRow(li, e, i);
     else menuRow(li, e);
 
     li.addEventListener('click', (ev) => onExecute(i, pickVariant(ev)));
@@ -91,7 +95,7 @@ export function render(next, { query: q = '', thinking = false, emptyText = '', 
     listEl.appendChild(li);
     rowEls.push(li);
   });
-  if (thinking) listEl.appendChild(thinkingRow());
+  if (thinking) listEl.appendChild(thinkingRow(thinking));
   seat(false);
   renderKeys();
 }
@@ -112,11 +116,7 @@ function songRow(li, e, showLiked, i) {
   if (e.dim) li.classList.add('dim');
   const th = document.createElement('span'); th.className = 'tile thumb';
   if (e.cover) {
-    const img = new Image();
-    img.alt = ''; img.loading = 'lazy'; img.decoding = 'async';
-    img.onerror = () => { img.remove(); th.innerHTML = icon('music'); };
-    img.src = thumbUrl(e.cover);
-    th.appendChild(img);
+    th.appendChild(coverImg(e.cover, 64, () => { th.innerHTML = icon('music'); }));
   } else th.innerHTML = icon('music');
   const main = document.createElement('div'); main.className = 'rowmain';
   const nm = document.createElement('span'); nm.className = 'nm'; highlightInto(nm, e.name, query);
@@ -147,6 +147,48 @@ function songRow(li, e, showLiked, i) {
   li.append(th, main, meta);
 }
 
+// Ask's answer: cover mosaic · ✻ title  N songs / the DJ's sentence ……… actions
+function answerRow(li, e, i) {
+  li.classList.add('answer');
+  const art = document.createElement('span'); art.className = 'mosaic';
+  if (e.covers?.length) {
+    for (const url of e.covers.slice(0, 4)) art.appendChild(coverImg(url, 96));
+    art.dataset.n = Math.min(4, e.covers.length);
+  } else art.classList.add('empty');
+  const body = document.createElement('div'); body.className = 'ans';
+  const head = document.createElement('div'); head.className = 'ans-head';
+  const ttl = document.createElement('span'); ttl.className = 'ans-title'; ttl.textContent = e.title;
+  head.append(ttl);
+  if (e.count) { const n = document.createElement('span'); n.className = 'ans-count'; n.textContent = `${e.count} songs`; head.append(n); }
+  const reply = document.createElement('div'); reply.className = 'ans-reply'; reply.textContent = e.reply || '';
+  body.append(head, reply);
+  const meta = document.createElement('span'); meta.className = 'meta';
+  const acts = e.count
+    ? [['primary', 'play', 'Play all  ↵'], ['next', 'next', 'Play next  ⌘↵'], ['queue', 'listPlus', 'Add to queue  ⇧↵'], ['alt', 'refresh', 'Try again  ⌥↵']]
+    : [['alt', 'refresh', 'Try again  ⌥↵']];
+  const box = document.createElement('span'); box.className = 'acts';
+  for (const [variant, ic, label] of acts) {
+    const b = document.createElement('button');
+    b.className = 'act'; b.title = label; b.setAttribute('aria-label', label);
+    b.innerHTML = icon(ic);
+    b.addEventListener('mousedown', (ev) => ev.preventDefault());
+    b.addEventListener('click', (ev) => { ev.stopPropagation(); onExecute(i, variant); });
+    box.append(b);
+  }
+  meta.append(box);
+  li.append(art, body, meta);
+}
+
+// What you asked, echoed as a speech bubble on the right — the conversation
+// shape Ask borrows from a chat. Not a row: the cursor never lands on it.
+function promptRow(text) {
+  const li = document.createElement('li');
+  li.className = 'cmdk-prompt';
+  const b = document.createElement('span'); b.className = 'bubble'; b.textContent = text;
+  li.append(b);
+  return li;
+}
+
 // [variant, icon, tooltip, active?] for a song row's buttons.
 function rowActions(e) {
   const out = [];
@@ -168,6 +210,8 @@ function menuRow(li, e) {
     tile.classList.add('swatch');
     tile.style.setProperty('--sw-bg', e.swatch[0]);
     tile.style.setProperty('--sw-ink', e.swatch[1]);
+  } else if (e.icon === 'spark') {
+    tile.classList.add('spark');
   } else tile.innerHTML = icon(e.icon || 'dot');
   const main = document.createElement('div'); main.className = 'rowmain';
   const ttl = document.createElement('span'); ttl.className = 'ttl'; highlightInto(ttl, e.title ?? e.label ?? '', query);
@@ -180,6 +224,21 @@ function menuRow(li, e) {
   li.append(tile, main, meta);
 }
 
+// A cover thumbnail. The CDN occasionally drops one of a burst of requests,
+// so a failure gets one quiet retry before the row falls back to an icon.
+function coverImg(url, px, fallback = () => {}) {
+  const img = new Image();
+  img.alt = ''; img.loading = 'lazy'; img.decoding = 'async';
+  let retried = false;
+  img.onerror = () => {
+    if (!retried) { retried = true; setTimeout(() => { img.src = `${thumbUrl(url, px)}&retry=1`; }, 500 + Math.random() * 700); return; }
+    img.remove();
+    fallback();
+  };
+  img.src = thumbUrl(url, px);
+  return img;
+}
+
 // NetEase's CDN resizes on request — a 64px thumb instead of the full cover.
 export function thumbUrl(url, px = 64) {
   return url.replace(/^http:/, 'https:') + (url.includes('?') ? '&' : '?') + `param=${px}y${px}`;
@@ -187,10 +246,11 @@ export function thumbUrl(url, px = 64) {
 
 // Cloud search in flight: the spark turns and the words shimmer, the way a
 // reply is "thinking". Not selectable — it isn't in rowEls.
-function thinkingRow() {
+function thinkingRow(text) {
   const li = document.createElement('li');
   li.className = 'cmdk-thinking';
-  li.innerHTML = '<span class="cmdk-spark" aria-hidden="true"></span><span class="cmdk-shimmer">Searching NetEase…</span>';
+  li.innerHTML = '<span class="cmdk-spark" aria-hidden="true"></span><span class="cmdk-shimmer"></span>';
+  li.lastChild.textContent = typeof text === 'string' ? text : 'Searching NetEase…';
   return li;
 }
 
@@ -232,6 +292,7 @@ function renderKeys() {
   let keys = [];
   if (!e || e.inert) keys = back;
   else if (e.submenu) keys = [['↵', 'Open'], ['⇥', 'Open'], ...back];
+  else if (e.kind === 'answer') keys = e.count ? [['↵', 'Play all'], ['⌘↵', 'Next'], ['⇧↵', 'Queue'], ['⌥↵', 'Try again']] : [['↵', 'Try again']];
   else if (e.moveRun) keys = [['↵', 'Play'], ['⌘↵', 'Next'], ['⌥↑↓', 'Move'], ['⌘⌫', 'Remove'], ...back];
   else if (e.name !== undefined) keys = [['↵', 'Play'], ['⌘↵', 'Next'], ['⇧↵', 'Queue'], ['⌥↵', 'Radio'], ...back];
   else keys = [['↵', 'Choose'], ...back];

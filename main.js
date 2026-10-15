@@ -5,6 +5,7 @@ const http = require('http');
 const { serveNcmApi } = require('@neteasecloudmusicapienhanced/api');
 const { WebSocketServer } = require('ws');
 const { Store } = require('./lib/store');
+const llm = require('./lib/llm').create(path.join(app.getPath('userData'), 'llm.json'));
 
 // Name has to be set BEFORE whenReady so it propagates to every place
 // Electron reads `app.getName()` (the About panel, the application menu
@@ -239,6 +240,11 @@ ipcMain.handle('set-window-bg', (_, color) => {
     win.setBackgroundColor(color);
   }
 });
+
+// Ask — the renderer sends a Responses API body (instructions, input, text
+// format); the key and endpoint stay here. See lib/llm.js.
+ipcMain.handle('llm-available', () => llm.available());
+ipcMain.handle('llm-respond', (_, body) => llm.respond(body));
 
 ipcMain.handle('resize-window', (_, w, h) => {
   if (!win || win.isDestroyed()) return;

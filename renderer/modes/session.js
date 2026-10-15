@@ -56,6 +56,20 @@ export function setPlaylistSession({ id, name, trackCount }) {
   });
 }
 
+// A queue the DJ built from a request ("下雨天，安静点的"). Like a playlist it
+// ends when it ends — no mode keeps extending it.
+export function setAskSession({ prompt, title, trackCount }) {
+  store.set({
+    playbackSession: {
+      kind: 'ask',
+      prompt: prompt || '',
+      label: title ? `✻ ${title}` : '✻ ask',
+      trackCount: trackCount || 0,
+      startedAt: Date.now(),
+    },
+  });
+}
+
 export function describeSession(session = store.get().playbackSession) {
   return session?.label || 'queue';
 }
@@ -100,7 +114,7 @@ export async function extendQueueForCurrentSession({ limit = DEFAULT_EXTEND_LIMI
   const session = state.playbackSession;
   const current = state.player.track;
 
-  if (!session || session.kind === 'manual' || session.kind === 'playlist') return [];
+  if (!session || session.kind === 'manual' || session.kind === 'playlist' || session.kind === 'ask') return [];
 
   const modeId = session.kind === 'radio' ? 'similar' : session.modeId;
   const mode = byId[modeId] || byId.all;

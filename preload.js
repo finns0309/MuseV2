@@ -19,6 +19,12 @@ contextBridge.exposeInMainWorld('muse', {
   history: {
     add: (event) => ipcRenderer.invoke('history-add', event),
   },
+  // Ask: an OpenAI-compatible Responses call made by the main process (the
+  // key never enters the renderer). respond(body) → { model, output, usage }.
+  llm: {
+    available: () => ipcRenderer.invoke('llm-available'),
+    respond: (body) => ipcRenderer.invoke('llm-respond', body),
+  },
   // Report a play to NetEase listen history. payload: { action:'startplay'|'playend', id, sourceId, time? }
   scrobble: (payload) => ipcRenderer.invoke('scrobble', payload),
   ncmBase: 'http://127.0.0.1:10754',
