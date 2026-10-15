@@ -373,12 +373,40 @@ body[data-theme="claude"][data-scheme="light"] {
 }
 /* progress line + elapsed time share a row so they read as one instrument */
 .cmdk-now__progress-row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-top: 8px;
+  margin-top: 3px;
+  padding: 5px 0;          /* a taller hit area than the 3px line */
+  margin-bottom: -5px;
   -webkit-app-region: no-drag;
 }
+/* The bar is a control: it thickens under the pointer, and while scrubbing. */
+.cmdk-now__progress-row.hot .cmdk-now__progress { cursor: pointer; transform: scaleY(1.9); }
+.cmdk-now__progress { transition: transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+/* The time under the pointer, in a small inverted bubble above the bar. */
+.cmdk-now__scrub {
+  position: absolute;
+  bottom: calc(100% - 2px);
+  left: 0;
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--fg);
+  color: var(--bg);
+  font-size: 11px;
+  line-height: 15px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, 3px);
+  transition: opacity 120ms ease, transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.cmdk-now__scrub.on { opacity: 1; transform: translate(-50%, 0); }
+/* Elapsed / total at home; the strip only has room for elapsed. */
+.cmdk-now__time .tot { opacity: 0.6; }
+.cmdk-panel:not(.idle) .cmdk-now__time .tot { display: none; }
 .cmdk-now__progress {
   position: relative;
   flex: 1 1 auto;
@@ -394,8 +422,11 @@ body[data-theme="claude"][data-scheme="light"] {
   border-radius: inherit;
   background: var(--accent);
   opacity: 0.8;
-  transition: background 800ms ease, opacity 300ms ease;
+  /* glides between the player's quarter-second samples… */
+  transition: width 260ms linear, background 800ms ease, opacity 300ms ease;
 }
+/* …and snaps on a seek or a new track. */
+.cmdk-now__progress span.snap { transition: background 800ms ease, opacity 300ms ease; }
 .cmdk-now__progress span::after {
   content: '';
   position: absolute;
@@ -1034,7 +1065,7 @@ body[data-theme="muse"] .cmdk-panel:not(.paused) .cmdk-mark {
 .cmdk-panel.idle .cmdk-now__meta { width: min(360px, 80%); }
 .cmdk-panel.idle .cmdk-now__title { font-size: 19px; letter-spacing: -0.3px; }
 .cmdk-panel.idle .cmdk-now__artist { margin-top: 5px; font-size: 13px; }
-.cmdk-panel.idle .cmdk-now__progress-row { width: min(280px, 100%); margin: 6px auto 0; }
+.cmdk-panel.idle .cmdk-now__progress-row { width: min(310px, 100%); margin: 1px auto -5px; }
 .cmdk-panel.idle .cmdk-now__progress span::after { opacity: 0.6; }
 /* The song's story with you — idle only; the search strip has no room. */
 .cmdk-now__context { display: none; }
@@ -1169,7 +1200,7 @@ body[data-theme="paper"] .cmdk-now__title { font-size: 14px; font-weight: 400; l
 body[data-theme="paper"] .cmdk-now__artist { font-style: italic; font-size: 12.5px; }
 body[data-theme="paper"] .cmdk-panel.idle .cmdk-now__title { font-size: 24px; line-height: 1.2; letter-spacing: -0.2px; }
 body[data-theme="paper"] .cmdk-panel.idle .cmdk-now__artist { font-size: 14px; margin-top: 3px; }
-body[data-theme="paper"] .cmdk-panel.idle .cmdk-now__progress-row { margin-top: 12px; }
+body[data-theme="paper"] .cmdk-panel.idle .cmdk-now__progress-row { margin-top: 7px; }
 
 /* Hairline + a solid playhead dot — ink, not light. */
 body[data-theme="paper"] .cmdk-now__progress { height: 1px; overflow: visible; background: var(--line-strong); }
@@ -1299,7 +1330,7 @@ body[data-theme="mono"] .cmdk-panel.idle .cmdk-now { gap: 20px; }
 body[data-theme="mono"] .cmdk-panel.idle .cmdk-now__cover { transform: none; }
 body[data-theme="mono"] .cmdk-panel.idle .cmdk-now__title { font-size: 16px; letter-spacing: 0; }
 body[data-theme="mono"] .cmdk-panel.idle .cmdk-now__artist { font-size: 12px; margin-top: 4px; }
-body[data-theme="mono"] .cmdk-panel.idle .cmdk-now__progress-row { margin-top: 12px; }
+body[data-theme="mono"] .cmdk-panel.idle .cmdk-now__progress-row { margin-top: 7px; }
 
 /* A segmented meter: ▮▮▮▮▮▯▯▯▯ */
 body[data-theme="mono"] .cmdk-now__progress {
@@ -1352,7 +1383,7 @@ body[data-theme="claude"] .cmdk-mark::before {
 body[data-theme="claude"] .cmdk-now__title { font-size: 14px; font-weight: 400; letter-spacing: 0; }
 body[data-theme="claude"] .cmdk-panel.idle .cmdk-now__title { font-size: 25px; line-height: 1.2; letter-spacing: -0.3px; }
 body[data-theme="claude"] .cmdk-panel.idle .cmdk-now__artist { font-size: 13.5px; margin-top: 4px; }
-body[data-theme="claude"] .cmdk-panel.idle .cmdk-now__progress-row { margin-top: 12px; }
+body[data-theme="claude"] .cmdk-panel.idle .cmdk-now__progress-row { margin-top: 7px; }
 body[data-theme="claude"] .cmdk-now__time { font-size: 11.5px; letter-spacing: 0; }
 
 /* Calm progress: a rounded clay bar, no glow. */

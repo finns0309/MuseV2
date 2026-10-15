@@ -97,9 +97,10 @@ export function mount(el) {
         <div class="cmdk-now__meta">
           <div class="cmdk-now__title" data-role="now-title"></div>
           <div class="cmdk-now__artist" data-role="now-artist"></div>
-          <div class="cmdk-now__progress-row">
+          <div class="cmdk-now__progress-row" data-role="progress-row">
             <div class="cmdk-now__progress"><span data-role="now-progress"></span></div>
             <div class="cmdk-now__time" data-role="now-time">0:00</div>
+            <span class="cmdk-now__scrub" data-role="scrub" aria-hidden="true"></span>
           </div>
           <div class="cmdk-now__context" data-role="now-context"></div>
         </div>
@@ -447,6 +448,12 @@ function onKey(e) {
     inputEl.value = '/' + rest;
     inputEl.setSelectionRange(1, 1);
     refresh();
+    e.preventDefault();
+    return;
+  }
+  // An empty input at home: ←/→ skip back / ahead 10s (⇧ for 30s).
+  if (!inputEl.value && !composer.getScope() && !e.metaKey && !e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+    hero.nudge((e.key === 'ArrowLeft' ? -1 : 1) * (e.shiftKey ? 30 : 10));
     e.preventDefault();
     return;
   }
