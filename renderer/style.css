@@ -339,13 +339,12 @@ body[data-theme="claude"][data-scheme="light"] {
 .cmdk-now__meta.meta-in { animation: meta-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 
 .cmdk-now__cover {
+  position: relative;
+  overflow: hidden;
   width: 42px;
   height: 42px;
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--accent), var(--bg-raised) 75%);
-  background-image: var(--cover, none);
-  background-size: cover;
-  background-position: center;
   box-shadow: var(--shadow-cover);
   -webkit-app-region: no-drag;
   /* size / radius are NOT transitioned: the FLIP scale carries the move */
@@ -449,6 +448,59 @@ body[data-theme="claude"][data-scheme="light"] {
 
 /* ---- Paused: cover dims, line goes quiet, time says so ---- */
 .cmdk-panel.paused .cmdk-now__cover { opacity: 0.72; filter: saturate(0.7); }
+
+/* ---- Cover art: two layers for the dissolve (hero.js dissolveTo) ---- */
+.cmdk-now__art {
+  position: absolute;
+  inset: 0;
+  background-image: var(--cover, none);
+  background-size: cover;
+  background-position: center;
+}
+.cmdk-now__art--prev { background-image: none; opacity: 0; pointer-events: none; }
+.cmdk-now__art--prev.fading { animation: art-out 620ms ease both; }
+.cmdk-now__art.settle { animation: art-settle 760ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes art-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes art-settle {
+  from { transform: scale(1.06); filter: blur(6px) saturate(1.15); }
+  to   { transform: none; filter: none; }
+}
+
+/* ---- Transport — ⏮ ⏯ ⏭ over the cover at home, on hover ---- */
+.cmdk-now__transport {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: radial-gradient(closest-side, rgba(0, 0, 0, 0.30), rgba(0, 0, 0, 0.12));
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+.cmdk-panel.idle .cmdk-now__transport { display: flex; }
+.cmdk-panel.idle .cmdk-now__cover:hover .cmdk-now__transport { opacity: 1; }
+.cmdk-now__transport button {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.86);
+  color: #1b1a19;
+  box-shadow: 0 6px 18px -6px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(10px);
+  transform: scale(0.82);
+  transition: transform 260ms cubic-bezier(0.25, 1.4, 0.4, 1), background 120ms ease;
+}
+.cmdk-now__transport button svg { width: 15px; height: 15px; }
+.cmdk-now__transport button.main { width: 46px; height: 46px; }
+.cmdk-now__transport button.main svg { width: 20px; height: 20px; }
+.cmdk-now__cover:hover .cmdk-now__transport button { transform: none; }
+.cmdk-now__cover:hover .cmdk-now__transport button.main { transition-delay: 30ms; }
+.cmdk-now__cover:hover .cmdk-now__transport button[data-act="next"] { transition-delay: 60ms; }
+.cmdk-now__transport button:hover { background: #fff; }
+.cmdk-now__transport button:active { transform: scale(0.9); transition-duration: 80ms; }
 .cmdk-panel.paused .cmdk-now__progress span { opacity: 0.35; }
 .cmdk-panel.paused .cmdk-now__progress span::after { opacity: 0 !important; }
 .cmdk-panel.paused .cmdk-now__time::before { content: 'Paused · '; }
@@ -1107,22 +1159,15 @@ body[data-theme="muse"] .cmdk-panel:not(.paused) .cmdk-mark {
   to   { opacity: 1; transform: none; }
 }
 
-/* Cover pop (track change) */
-@keyframes cover-pop {
-  0%   { transform: scale(0.88); opacity: 0.3; filter: blur(2px); }
-  50%  { transform: scale(1.04); opacity: 1; filter: none; }
-  100% { transform: scale(1);    opacity: 1; }
+/* Track change: title, artist and the story line rise in, one after another
+   (the cover dissolves on its own — see .cmdk-now__art). */
+@keyframes text-in {
+  from { opacity: 0; transform: translateY(6px); filter: blur(3px); }
+  to   { opacity: 1; transform: none; filter: none; }
 }
-.cmdk-now__cover.pop {
-  animation: cover-pop 520ms cubic-bezier(0.2, 0.9, 0.25, 1);
-}
-
-/* Title slide-in */
-@keyframes title-in {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: none; }
-}
-.cmdk-now__title { animation: title-in 400ms cubic-bezier(0.2, 0.9, 0.25, 1); }
+.cmdk-now__title.text-in   { animation: text-in 520ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.cmdk-now__artist.text-in  { animation: text-in 520ms 70ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.cmdk-now__context.text-in { animation: text-in 520ms 140ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 
 /* Window appear / leave — opacity only. No rise (the eye would chase the
    panel before finding the caret), no scale (would expose the window bg at
@@ -1137,15 +1182,6 @@ body[data-theme="muse"] .cmdk-panel:not(.paused) .cmdk-mark {
 }
 .cmdk-panel.appear { animation: panel-appear 160ms ease-out both; }
 .cmdk-panel.leaving { animation: panel-leave 110ms ease-in both; }
-
-/* Track change cross-fade */
-@keyframes now-change {
-  0%   { opacity: 1; transform: none; }
-  30%  { opacity: 0; transform: translateY(-4px); }
-  50%  { opacity: 0; transform: translateY(4px); }
-  100% { opacity: 1; transform: none; }
-}
-.cmdk-now.changing { animation: now-change 500ms cubic-bezier(0.2, 0.9, 0.25, 1); }
 
 /* First track loaded */
 @keyframes now-enter {

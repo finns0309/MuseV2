@@ -93,7 +93,15 @@ export function mount(el) {
         <div class="cmdk-greeting__sub" data-role="greeting-sub"></div>
       </div>
       <div class="cmdk-now" data-role="now" hidden>
-        <div class="cmdk-now__cover" data-role="now-cover"></div>
+        <div class="cmdk-now__cover" data-role="now-cover">
+          <div class="cmdk-now__art" data-role="cover-art"></div>
+          <div class="cmdk-now__art cmdk-now__art--prev" data-role="cover-prev"></div>
+          <div class="cmdk-now__transport" data-role="transport">
+            <button data-act="prev" aria-label="Previous" title="Previous  ⌘←"></button>
+            <button data-act="toggle" class="main" aria-label="Play or pause" title="Play / pause  ⌘P"></button>
+            <button data-act="next" aria-label="Next" title="Next  ⌘→"></button>
+          </div>
+        </div>
         <div class="cmdk-now__meta">
           <div class="cmdk-now__title" data-role="now-title"></div>
           <div class="cmdk-now__artist" data-role="now-artist"></div>
@@ -209,11 +217,6 @@ export function mount(el) {
   store.select((s) => s.cmdkOpen, (open) => {
     rootEl.classList.toggle('open', open);
     if (open) { list.armIntro(); inputEl.value = pendingOpenInput; pendingOpenInput = ''; refresh(); setTimeout(() => inputEl.focus(), 10); }
-  });
-  store.select((s) => s.player.track?.id ?? null, (id, prevId) => {
-    // During an Enter → home landing the choreography already moves the
-    // now-area; layering the generic cross-fade on top reads as a stutter.
-    if (prevId !== undefined && id !== prevId && id !== null && !landing) tx.onTrackChange(hero.nowArea());
   });
   // Paused ⇒ the cover dims and the progress line goes quiet (CSS .paused).
   store.selectKey(

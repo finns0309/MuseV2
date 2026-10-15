@@ -9,8 +9,10 @@ import * as accent from '../accent.js';
 import * as tx from '../transitions.js';
 import { formatArtists } from '../commands.js';
 import * as memory from '../lib/memory.js';
+import { thumbUrl } from './list.js';
 
 let nowEl, coverEl, metaEl, titleEl, artistEl, timeEl, progressEl, contextEl, rowEl, barEl, scrubEl;
+let artEl, prevArtEl, transportEl;
 let greetingEl, greetingTextEl, greetingSubEl;
 let lastNowCover = '';
 let lastRenderedTrackId = null;
@@ -30,7 +32,11 @@ export function mountHero(root) {
   rowEl          = root.querySelector('[data-role=progress-row]');
   barEl          = root.querySelector('.cmdk-now__progress');
   scrubEl        = root.querySelector('[data-role=scrub]');
+  artEl          = root.querySelector('[data-role=cover-art]');
+  prevArtEl      = root.querySelector('[data-role=cover-prev]');
+  transportEl    = root.querySelector('[data-role=transport]');
   wireScrub();
+  wireTransport();
 
   tx.initCoverTilt(coverEl);
   store.selectKey(
@@ -63,30 +69,76 @@ function renderNow() {
   nowEl.hidden = false;
 
   const isNewTrack = t.id !== lastRenderedTrackId;
+  const first = lastRenderedTrackId === null;
   lastRenderedTrackId = t.id;
   if (isNewTrack) {
-    if (t.name) tx.scrambleText(titleEl, t.name, 380);
-    else titleEl.textContent = t.name || '';
+    titleEl.textContent = t.name || '';
     artistEl.textContent = formatArtists(t) || t.al?.name || '';
+    // Title, artist and the story line rise in one after another.
+    if (!first) for (const el of [titleEl, artistEl, contextEl]) tx.replay(el, 'text-in');
   }
 
   if (!scrubbing) renderTime(p.currentTime || 0, p.duration || 0);
 
   const coverUrl = t.al?.picUrl;
   if (coverUrl && coverUrl !== lastNowCover) {
+    // 400px is plenty for a 148pt hero at 2x, and goes through the disk cache
+    // (lib/thumbs.js) — a cover you've seen before is instant.
+    const src = thumbUrl(coverUrl, 400);
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
       if (store.get().player.track?.al?.picUrl !== coverUrl) return;
-      coverEl.style.setProperty('--cover', `url("${coverUrl}")`);
-      tx.popEl(coverEl);
-      accent.update(coverUrl);
+      dissolveTo(`url("${src}")`);
+      accent.update(src);
     };
-    img.src = coverUrl;
+    img.src = src;
   } else if (!coverUrl) {
     coverEl.style.removeProperty('--cover');
   }
   lastNowCover = coverUrl || '';
+}
+
+// ---- Cover: a dissolve, not a pop ------------------------------------------------
+// The outgoing art stays on a layer above and fades away while the new art
+// settles in from a touch of zoom and blur. Two layers inside the cover
+// (which keeps its own transform for the tilt and the FLIP).
+
+let currentArt = '';
+function dissolveTo(art) {
+  if (currentArt === art) return;
+  if (currentArt) {
+    prevArtEl.style.backgroundImage = currentArt;
+    prevArtEl.classList.remove('fading');
+    void prevArtEl.offsetWidth;
+    prevArtEl.classList.add('fading');
+    tx.replay(artEl, 'settle');
+  }
+  coverEl.style.setProperty('--cover', art);
+  currentArt = art;
+}
+
+// ---- Transport: ⏮ ⏯ ⏭ on the cover at home ----------------------------------------
+
+const T_ICON = {
+  prev:  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 5v14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M19 5.9v12.2a.9.9 0 0 1-1.4.75l-8.7-6.1a.9.9 0 0 1 0-1.5l8.7-6.1A.9.9 0 0 1 19 5.9Z" fill="currentColor"/></svg>',
+  next:  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.5 5v14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M5 5.9v12.2a.9.9 0 0 0 1.4.75l8.7-6.1a.9.9 0 0 0 0-1.5L6.4 5.15A.9.9 0 0 0 5 5.9Z" fill="currentColor"/></svg>',
+  play:  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.6v12.8a1 1 0 0 0 1.5.86l10.4-6.4a1 1 0 0 0 0-1.72L9.5 4.74A1 1 0 0 0 8 5.6Z" fill="currentColor"/></svg>',
+  pause: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="5" width="3.8" height="14" rx="1.3" fill="currentColor"/><rect x="13.7" y="5" width="3.8" height="14" rx="1.3" fill="currentColor"/></svg>',
+};
+
+function wireTransport() {
+  const [prevB, toggleB, nextB] = transportEl.querySelectorAll('button');
+  prevB.innerHTML = T_ICON.prev;
+  nextB.innerHTML = T_ICON.next;
+  transportEl.addEventListener('mousedown', (e) => e.preventDefault());   // keep the input focused
+  transportEl.addEventListener('click', (e) => {
+    const act = e.target.closest('button')?.dataset.act;
+    if (act === 'prev') player.prev();
+    else if (act === 'next') player.next();
+    else if (act === 'toggle') player.toggle();
+  });
+  store.select((s) => !!s.player.playing, (playing) => { toggleB.innerHTML = playing ? T_ICON.pause : T_ICON.play; });
 }
 
 // ---- Progress: fluid, and a control -------------------------------------------

@@ -1,19 +1,9 @@
-// State transition animations. Every visual "moment" (track change, window
-// appear/hide, cover tilt, title scramble) lives here. cmdk.js calls these;
+// State transition animations — the FLIP shared-element move, window
+// appear/hide, the cover tilt. (A track change is the cover dissolve and the
+// text-in stagger in ui/hero.js + style.css.) cmdk.js calls these;
 // CSS keyframes handle the actual rendering.
 
 // ---- Helpers ----------------------------------------------------------------
-
-export function popEl(el) {
-  if (!el) return;
-  // Mid-FLIP the element carries an inline transform; the pop keyframes
-  // would override it and the cover would jump. The landing handles the
-  // reveal in that case.
-  if (el.dataset.flipping) return;
-  el.classList.remove('pop');
-  void el.offsetWidth;
-  el.classList.add('pop');
-}
 
 export function replay(el, cls) { replayClass(el, cls); }
 
@@ -68,13 +58,6 @@ export function flip(el, mutate, { duration = 220, easing = EASE_OUT } = {}) {
   });
 }
 
-// ---- Track change -----------------------------------------------------------
-
-export function onTrackChange(nowEl) {
-  if (!nowEl || nowEl.hidden) return;
-  replayClass(nowEl, 'changing');
-}
-
 // ---- Window appear / hide ---------------------------------------------------
 
 export function animateAppear(panelEl) {
@@ -106,27 +89,3 @@ export function initCoverTilt(coverEl) {
   });
 }
 
-// ---- Title scramble ---------------------------------------------------------
-
-const CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-
-export function scrambleText(el, finalText, duration = 380) {
-  const len = finalText.length;
-  const steps = 6;
-  const interval = duration / steps;
-  let step = 0;
-  const timer = setInterval(() => {
-    step++;
-    if (step >= steps) {
-      clearInterval(timer);
-      el.textContent = finalText;
-      return;
-    }
-    const progress = step / steps;
-    let out = '';
-    for (let i = 0; i < len; i++) {
-      out += (i / len < progress) ? finalText[i] : CHARS[Math.random() * CHARS.length | 0];
-    }
-    el.textContent = out;
-  }, interval);
-}
