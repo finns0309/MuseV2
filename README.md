@@ -55,6 +55,7 @@ Everything happens in the palette. Type to search; prefix with `/` for commands.
 | `/<words>` | search every command at once, grouped by menu (`/da` → Daily, Dark; `/claude` → the theme) |
 | `/queue <q>` `/lib <q>` | filter the queue (Now playing · Up next · Played) or your library |
 | `/pl <id or url>` | load a NetEase playlist and remember it |
+| `/recent` | recently played, newest first, a section per day — the time you heard it, `×N` for a song you looped; `↵` plays it again |
 | `/era` | your listening by month (plays, the song you played most) — `↵` plays that month's top 50. "↺ N months ago today" sits on top, and as a chip at home |
 | `/mode <q>` `/theme <q>` | pick a mode / theme — themes, accents and light/dark keep the menu open so you can flip through them |
 | `/appearance` | light / dark, and **Song in the menu bar** — the title beside the tray's ✻ (solid while playing, dimmed when paused, it turns once on each new track) |

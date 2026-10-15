@@ -142,6 +142,33 @@ export function eras() {
   return out.sort((a, b) => b.key.localeCompare(a.key));
 }
 
+// ---- Recently played ---------------------------------------------------------------
+// Newest first; a song played several times in a row is one entry (×N).
+// → [{ track, at, count }]
+
+export function recent(limit = 150) {
+  const out = [];
+  for (let i = history.length - 1; i >= 0 && out.length < limit; i--) {
+    const h = history[i];
+    if (!h?.songId || !h.at) continue;
+    const last = out[out.length - 1];
+    if (last && last.track.id === h.songId) { last.count++; continue; }
+    out.push({ track: toTrack(h), at: h.at, count: 1 });
+  }
+  return out;
+}
+
+// "Today", "Yesterday", "Monday", then "Oct 3".
+export function dayLabel(ms, now = new Date()) {
+  const d = new Date(ms);
+  const start = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const days = Math.round((start(now) - start(d)) / 86400000);
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  if (days < 7) return d.toLocaleDateString('en', { weekday: 'long' });
+  return d.toLocaleDateString('en', { month: 'short', day: 'numeric' });
+}
+
 // ---- Formatting ----------------------------------------------------------------------
 
 export function ago(ms, now = Date.now()) {

@@ -198,6 +198,20 @@ function buildQueueEntries(filter) {
   return out.length ? out : [note('No matches in the queue')];
 }
 
+// Your history, newest first, a section per day; the time you heard it on
+// the right, ×N for a song you looped.
+function buildRecentEntries(filter) {
+  const f = (filter || '').trim().toLowerCase();
+  const rows = memory.recent(f ? 400 : LIST_CAP)
+    .filter(({ track: t }) => !f || (t.name || '').toLowerCase().includes(f) || formatArtists(t).toLowerCase().includes(f));
+  if (!rows.length) return [note(f ? 'Nothing like that lately' : 'Nothing played yet')];
+  return rows.map(({ track, at, count }) => {
+    const e = songEntry(track, { group: memory.dayLabel(at) });
+    const time = new Date(at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    return { ...e, dur: count > 1 ? `×${count} · ${time}` : time };
+  });
+}
+
 function buildLibraryEntries(filter) {
   const tracks = store.get().library.tracks;
   if (!tracks.length) return [note('Your library is empty', 'like songs on NetEase first')];
@@ -406,6 +420,16 @@ const SCOPES = [
     items: buildQueueEntries,
   },
   {
+    id: 'recent', aliases: ['history', 'played', 'last'], title: 'Recently played', icon: 'clock', group: LISTEN,
+    row() {
+      const r = memory.recent(400);
+      if (!r.length) return null;
+      const today = r.filter((x) => memory.dayLabel(x.at) === 'Today').length;
+      return { desc: today ? `${today} today` : `last: ${r[0].track.name}` };
+    },
+    items: buildRecentEntries,
+  },
+  {
     id: 'library', aliases: ['lib'], title: 'Library', icon: 'heart', group: LISTEN,
     row() {
       const n = store.get().library.tracks.length;
@@ -422,7 +446,7 @@ const SCOPES = [
     items: buildPlaylistEntries,
   },
   {
-    id: 'era', aliases: ['eras', 'month', 'months', 'history'], title: 'Eras', icon: 'layers', group: LISTEN,
+    id: 'era', aliases: ['eras', 'month', 'months'], title: 'Eras', icon: 'layers', group: LISTEN,
     row() {
       const n = memory.eras().length;
       return n ? { desc: `${n} months of your listening` } : null;
