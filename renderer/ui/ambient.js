@@ -1,8 +1,8 @@
 // Ambient — MuseV2 being present when you haven't summoned it.
 //
-//  · The menu bar: the playing song's title beside the tray icon, with the ✻
-//    while it plays ("✻ 夜に駆ける"). Off with /appearance → Song in the
-//    menu bar.
+//  · The menu bar: the ✻ spark (solid playing, dimmed paused, a quick turn on
+//    a track change — main.js) and the song's title beside it. The title is
+//    off with /appearance → Song in the menu bar; the spark always shows.
 //  · The spark: the composer's ✻ breathes with the music — the spectrum's
 //    loudness, smoothed, lands in --level on the panel and the themes that
 //    want it (claude, muse) scale the mark by it.
@@ -24,10 +24,11 @@ export function mountAmbient(panel) {
     (s) => `${s.player.track?.id ?? 0}|${s.player.playing}|${s.appearance.menuBar}`,
     (s) => {
       const t = s.player.track;
-      const text = s.appearance.menuBar && t?.name
-        ? `${s.player.playing ? '✻ ' : ''}${clip(t.name, TITLE_MAX)}`
-        : '';
-      window.muse.setTrayTitle?.(text);
+      window.muse.setTrayState?.({
+        title: s.appearance.menuBar && t?.name ? clip(t.name, TITLE_MAX) : '',
+        playing: !!s.player.playing,
+        trackId: t?.id ?? null,
+      });
     }
   );
 

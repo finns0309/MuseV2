@@ -268,11 +268,38 @@ ipcMain.handle('llm-respond', (_, body) => llm.respond(body));
 
 ipcMain.handle('copy-text', (_, text) => { clipboard.writeText(String(text || '')); });
 
-// The playing song beside the menu-bar icon — the renderer decides the text
-// (and whether to show any; see renderer/ui/ambient.js).
-ipcMain.handle('tray-title', (_, text) => {
+// The menu bar: the ✻ spark, solid while playing and dimmed when paused,
+// turning once when the track changes; beside it the song's title (the
+// renderer decides the text and whether to show any — ui/ambient.js).
+const trayImages = {};
+function trayImage(name) {
+  if (!trayImages[name]) {
+    const img = nativeImage.createFromPath(path.join(__dirname, 'assets', `${name}.png`));
+    img.setTemplateImage(true);
+    trayImages[name] = img;
+  }
+  return trayImages[name];
+}
+let trayTrackId = null;
+let traySpin = null;
+function spinTray(rest) {
+  clearInterval(traySpin);
+  let frame = 1;
+  traySpin = setInterval(() => {
+    if (!tray || tray.isDestroyed?.()) { clearInterval(traySpin); traySpin = null; return; }
+    if (frame <= 5) tray.setImage(trayImage(`traySpin${frame}Template`));
+    else { clearInterval(traySpin); traySpin = null; tray.setImage(trayImage(rest)); }
+    frame++;
+  }, 70);
+}
+ipcMain.handle('tray-state', (_, { title = '', playing = false, trackId = null } = {}) => {
   if (!tray || tray.isDestroyed?.()) return;
-  tray.setTitle(String(text || '').slice(0, 64), { fontType: 'monospacedDigit' });
+  tray.setTitle(String(title).slice(0, 64), { fontType: 'monospacedDigit' });
+  const rest = playing ? 'trayTemplate' : 'trayPausedTemplate';
+  const changed = trackId && trayTrackId && trackId !== trayTrackId;
+  trayTrackId = trackId || trayTrackId;
+  if (changed && playing) spinTray(rest);
+  else if (!traySpin) tray.setImage(trayImage(rest));
 });
 
 ipcMain.handle('resize-window', (_, w, h) => {

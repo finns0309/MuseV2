@@ -10,8 +10,8 @@ contextBridge.exposeInMainWorld('muse', {
   onOpenCommandSurface: (cb) => ipcRenderer.on('open-command-surface', () => cb()),
   hideWindow: () => ipcRenderer.invoke('hide-window'),
   copyText: (text) => ipcRenderer.invoke('copy-text', text),
-  // Text beside the menu-bar icon ('' clears it).
-  setTrayTitle: (text) => ipcRenderer.invoke('tray-title', text),
+  // The menu bar: { title ('' = none), playing, trackId } → icon + text.
+  setTrayState: (state) => ipcRenderer.invoke('tray-state', state),
   resizeWindow: (w, h) => ipcRenderer.invoke('resize-window', w, h),
   setWindowBg: (color) => ipcRenderer.invoke('set-window-bg', color),
   onWindowAppear: (cb) => ipcRenderer.on('window-appear', () => cb()),

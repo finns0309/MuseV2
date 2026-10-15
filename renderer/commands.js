@@ -253,7 +253,7 @@ function appearanceLeaves() {
     })),
     {
       kind: 'appearance', icon: 'menubar',
-      title: 'Song in the menu bar', desc: menuBar ? 'on — “✻ title” beside the icon' : 'off',
+      title: 'Song in the menu bar', desc: menuBar ? 'on — the title beside the ✻' : 'off — just the ✻',
       checked: menuBar, keywords: ['menu bar', 'menubar', 'tray', 'title'],
       run: () => { actions.setMenuBar(!menuBar); return { ok: `menu bar · ${menuBar ? 'off' : 'on'}` }; },
     },
