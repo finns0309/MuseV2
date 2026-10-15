@@ -30,5 +30,7 @@ contextBridge.exposeInMainWorld('muse', {
   },
   // Report a play to NetEase listen history. payload: { action:'startplay'|'playend', id, sourceId, time? }
   scrobble: (payload) => ipcRenderer.invoke('scrobble', payload),
+  // Cover thumbnails go through main's disk cache (lib/thumbs.js).
+  thumbScheme: 'muse-thumb',
   ncmBase: 'http://127.0.0.1:10764',   // MuseV2's own NCM API port — keep in sync with main.js NCM_PORT
 });

@@ -233,7 +233,12 @@ function coverImg(url, px, fallback = () => {}) {
   img.alt = ''; img.loading = 'lazy'; img.decoding = 'async';
   let retried = false;
   img.onerror = () => {
-    if (!retried) { retried = true; setTimeout(() => { img.src = `${thumbUrl(url, px)}&retry=1`; }, 500 + Math.random() * 700); return; }
+    if (!retried) {
+      retried = true;
+      const again = thumbUrl(url, px);
+      setTimeout(() => { img.src = again + (again.includes('?') ? '&' : '?') + 'retry=1'; }, 500 + Math.random() * 700);
+      return;
+    }
     img.remove();
     fallback();
   };
@@ -241,9 +246,17 @@ function coverImg(url, px, fallback = () => {}) {
   return img;
 }
 
-// NetEase's CDN resizes on request — a 64px thumb instead of the full cover.
+// A px-sized cover. In the app it goes through main's disk cache (the
+// muse-thumb scheme, lib/thumbs.js); elsewhere straight to NetEase's CDN,
+// which resizes on request.
 export function thumbUrl(url, px = 64) {
+  const scheme = window.muse?.thumbScheme;
+  if (scheme) return `${scheme}://img/${px}/${b64url(url)}`;
   return url.replace(/^http:/, 'https:') + (url.includes('?') ? '&' : '?') + `param=${px}y${px}`;
+}
+
+function b64url(s) {
+  return btoa(unescape(encodeURIComponent(s))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 // Cloud search in flight: the spark turns and the words shimmer, the way a

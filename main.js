@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, Tray, ipcMain, dialog, globalShortcut, nativeImage, clipboard } = require('electron');
+const { app, BrowserWindow, Menu, Tray, ipcMain, dialog, globalShortcut, nativeImage, clipboard, protocol } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
@@ -6,6 +6,8 @@ const { serveNcmApi } = require('@neteasecloudmusicapienhanced/api');
 const { WebSocketServer } = require('ws');
 const { Store } = require('./lib/store');
 const llm = require('./lib/llm').create(path.join(app.getPath('userData'), 'llm.json'));
+const thumbs = require('./lib/thumbs');
+thumbs.registerScheme(protocol);   // must precede 'ready'
 
 // Name has to be set BEFORE whenReady so it propagates to every place
 // Electron reads `app.getName()` (the About panel, the application menu
@@ -416,6 +418,7 @@ app.whenReady().then(async () => {
   if (process.platform === 'darwin' && app.dock) app.dock.hide();
 
   if (!gotLock) return;   // another MuseV2 has it (see requestSingleInstanceLock)
+  thumbs.serve(protocol, app.getPath('userData'));
 
   try {
     store = new Store(path.join(app.getPath('userData'), 'data'));
