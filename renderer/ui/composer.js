@@ -70,6 +70,8 @@ export function mountComposer(root, h) {
     if (chip) actions.setMode(chip.dataset.mode);
   });
   memory.prime().then(() => renderChips(store.get()));
+  // Late font loads nudge chip widths; put the glide back on its chip.
+  document.fonts?.ready.then(() => reseatChips());
 
   // Why this queue exists — mode / manual / radio / playlist — always visible.
   store.selectKey(
@@ -79,11 +81,18 @@ export function mountComposer(root, h) {
   // The send button doubles as play/pause while the input is empty.
   store.selectKey((s) => `${s.player.playing}|${!!s.player.track}`, renderSend);
   // The heart shows whether the current track is in the library.
+  // A like (not a track change) pops the heart and throws off a few sparks.
+  let heartFor = null;
   store.selectKey(
     (s) => `${s.player.track?.id ?? 0}|${s.library.tracks.length}`,
     (s) => {
       const id = s.player.track?.id;
-      heartEl.classList.toggle('on', !!id && s.library.tracks.some((t) => t.id === id));
+      const on = !!id && s.library.tracks.some((t) => t.id === id);
+      if (on && heartFor === id && !heartEl.classList.contains('on')) {
+        heartEl.classList.remove('burst'); void heartEl.offsetWidth; heartEl.classList.add('burst');
+      }
+      heartFor = id;
+      heartEl.classList.toggle('on', on);
       heartEl.disabled = !id;
     }
   );
@@ -126,21 +135,28 @@ export function reset() {
   inputEl.value = '';
 }
 
+// The send button holds all three glyphs and morphs between them (CSS keys
+// off data-kind): play ⇄ pause turn and cross-fade, ↑ rises in when you type.
 export function renderSend() {
   if (!sendEl) return;
+  if (!sendEl.firstChild) {
+    sendEl.innerHTML = Object.entries(ICON).map(([k, svg]) => `<span class="ico ${k}">${svg}</span>`).join('');
+  }
   const typing = !!inputEl.value.trim();
   const p = store.get().player;
   const kind = typing ? 'send' : (p.playing ? 'pause' : 'play');
+  sendEl.disabled = !typing && !p.track;
   if (sendEl.dataset.kind === kind) return;
   sendEl.dataset.kind = kind;
-  sendEl.innerHTML = ICON[kind];
   sendEl.setAttribute('aria-label', typing ? 'Run' : (p.playing ? 'Pause' : 'Play'));
-  sendEl.disabled = !typing && !p.track;
 }
 
+let glideEl = null;
 function renderChips(s) {
   const active = s.playbackSession?.kind === 'mode' ? s.playbackSession.modeId : null;
+  if (!glideEl) { glideEl = document.createElement('span'); glideEl.className = 'cmdk-chips__glide'; }
   chipsEl.innerHTML = '';
+  chipsEl.appendChild(glideEl);
   // "↺ 3 months ago today" leads the row when your history has that day.
   const day = memory.onThisDay();
   if (day) {
@@ -159,7 +175,23 @@ function renderChips(s) {
     b.textContent = cap(m.label);
     chipsEl.appendChild(b);
   }
+  placeGlide();   // reading offsets forces layout — no need to wait a frame
 }
+
+// The active chip's tint is one pill that glides to whichever chip is on —
+// the same idea as the list cursor.
+function placeGlide() {
+  const on = chipsEl.querySelector('.cmdk-chip.on');
+  if (!on || !on.offsetWidth) { glideEl.style.opacity = '0'; return; }
+  const first = glideEl.style.opacity !== '1';
+  if (first) glideEl.style.transition = 'none';
+  glideEl.style.opacity = '1';
+  glideEl.style.transform = `translate(${on.offsetLeft}px, ${on.offsetTop}px)`;
+  glideEl.style.width = `${on.offsetWidth}px`;
+  glideEl.style.height = `${on.offsetHeight}px`;
+  if (first) { void glideEl.offsetWidth; glideEl.style.transition = ''; }
+}
+export function reseatChips() { if (glideEl) placeGlide(); }
 
 function playOnThisDay() {
   const day = memory.onThisDay();

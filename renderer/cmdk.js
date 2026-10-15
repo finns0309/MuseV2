@@ -227,7 +227,7 @@ export function mount(el) {
   // measured for the old ones — re-seat it without the glide.
   store.selectKey(
     (s) => `${s.appearance.theme}|${s.appearance.scheme}`,
-    () => requestAnimationFrame(() => list.seat(false))
+    () => requestAnimationFrame(() => { list.seat(false); composer.reseatChips(); })
   );
 
   // Window appear (global hotkey). Focus synchronously — the first keystroke
@@ -236,6 +236,7 @@ export function mount(el) {
   window.muse.onWindowAppear?.(() => {
     if (inputEl.value || composer.getScope()) { composer.reset(); list.render([]); setIdle(true, { instant: true }); }
     hero.renderGreeting();   // the hour may have turned
+    composer.reseatChips();
     tx.animateAppear(panelEl);
     inputEl.focus();
   });
@@ -386,6 +387,7 @@ function setIdle(wantIdle, { instant = false } = {}) {
   if (instant) {
     panel.classList.remove('leaving-search');
     panel.classList.add('idle');
+    composer.reseatChips();
     resizeToContent();
     return;
   }
@@ -397,6 +399,7 @@ function setIdle(wantIdle, { instant = false } = {}) {
     panel.classList.remove('leaving-search');
     tx.flip(hero.cover(), () => panel.classList.add('idle'), { duration: 300, easing: tx.EASE_SETTLE });
     tx.replay(hero.meta(), 'meta-in');
+    composer.reseatChips();
   }, LEAVE_MS);
 }
 

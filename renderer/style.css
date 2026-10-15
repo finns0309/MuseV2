@@ -599,7 +599,33 @@ body[data-theme="muse"] .cmdk-panel:not(.paused) .cmdk-mark {
 .cmdk-tool:hover:not(:disabled) { background: var(--hover-bg-strong); color: var(--fg); }
 .cmdk-tool:disabled { opacity: 0.4; cursor: default; }
 .cmdk-tool--heart { font-family: var(--font-body); font-size: 12px; }
+.cmdk-tool--heart { position: relative; }
 .cmdk-tool--heart.on { color: var(--accent); border-color: color-mix(in srgb, var(--accent), transparent 60%); }
+/* A like: the heart pops and six sparks fly out. */
+.cmdk-tool--heart.burst { animation: heart-pop 520ms cubic-bezier(0.25, 1.5, 0.4, 1); }
+.cmdk-tool--heart.burst::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 3px;
+  height: 3px;
+  margin: -1.5px;
+  border-radius: 50%;
+  pointer-events: none;
+  box-shadow: 0 -13px var(--accent), 11px -7px var(--accent), 11px 7px var(--accent),
+              0 13px var(--accent), -11px 7px var(--accent), -11px -7px var(--accent);
+  animation: heart-sparks 560ms ease-out both;
+}
+@keyframes heart-pop {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.32); }
+  100% { transform: scale(1); }
+}
+@keyframes heart-sparks {
+  from { transform: scale(0.4); opacity: 1; }
+  to   { transform: scale(1.5); opacity: 0; }
+}
 /* ☾ 24m — the sleep timer, when set. */
 .cmdk-sleep {
   height: 24px;
@@ -611,6 +637,8 @@ body[data-theme="muse"] .cmdk-panel:not(.paused) .cmdk-mark {
   white-space: nowrap;
 }
 .cmdk-sleep[hidden] { display: none; }
+.cmdk-sleep:not([hidden]) { animation: badge-in 360ms cubic-bezier(0.25, 1.4, 0.4, 1) both; }
+@keyframes badge-in { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: none; } }
 /* Session label — why the current queue exists (mode / manual / radio /
    playlist). Sits where a model picker would; clicking opens /mode. */
 .cmdk-session {
@@ -650,6 +678,20 @@ body[data-theme="muse"] .cmdk-panel:not(.paused) .cmdk-mark {
   color: var(--on-accent);
   transition: background 600ms ease, opacity 200ms ease, transform 120ms ease;
 }
+.cmdk-send { position: relative; overflow: hidden; }
+.cmdk-send .ico {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  transform: scale(0.5) rotate(-60deg);
+  transition: opacity 160ms ease, transform 300ms cubic-bezier(0.25, 1.35, 0.4, 1);
+}
+.cmdk-send .ico.send { transform: translateY(70%); }
+.cmdk-send[data-kind="play"] .ico.play,
+.cmdk-send[data-kind="pause"] .ico.pause,
+.cmdk-send[data-kind="send"] .ico.send { opacity: 1; transform: none; }
 .cmdk-send svg { width: 16px; height: 16px; display: block; }
 .cmdk-send:hover:not(:disabled) { filter: brightness(1.07); }
 .cmdk-send:active:not(:disabled) { transform: scale(0.94); }
@@ -664,20 +706,36 @@ body[data-theme="muse"] .cmdk-panel:not(.paused) .cmdk-mark {
   padding: 0 16px 14px;
 }
 .cmdk-panel:not(.idle) .cmdk-chips { display: none; }
+.cmdk-chips { position: relative; }
 .cmdk-chip {
+  position: relative;
+  z-index: 1;
   height: 28px;
   padding: 0 12px;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-pill);
   font-size: 12.5px;
   color: var(--fg-muted);
-  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+  transition: background 120ms ease, color 200ms ease, border-color 200ms ease,
+              transform 200ms cubic-bezier(0.25, 1.4, 0.4, 1);
 }
-.cmdk-chip:hover { background: var(--hover-bg-strong); color: var(--fg); }
-.cmdk-chip.on {
-  color: var(--fg);
-  border-color: color-mix(in srgb, var(--accent), transparent 45%);
-  background: color-mix(in srgb, var(--accent), transparent 90%);
+.cmdk-chip:hover { background: var(--hover-bg); color: var(--fg); transform: translateY(-1px); }
+.cmdk-chip:active { transform: scale(0.96); transition-duration: 80ms; }
+.cmdk-chip.on { color: var(--fg); border-color: transparent; background: none; }
+/* The active tint: one pill that glides between chips (composer.placeGlide). */
+.cmdk-chips__glide {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  border: 1px solid color-mix(in srgb, var(--accent), transparent 45%);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--accent), transparent 88%);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 420ms cubic-bezier(0.3, 1.25, 0.4, 1),
+              width 420ms cubic-bezier(0.3, 1.25, 0.4, 1),
+              opacity 200ms ease;
 }
 
 /* ---- Greeting — the hero when nothing is playing ---- */
@@ -872,7 +930,8 @@ body[data-theme="muse"] .cmdk-panel:not(.paused) .cmdk-mark {
 .cmdk-list .meta .chev svg { width: 14px; height: 14px; }
 /* The selected song shows its actions as buttons instead of its length. */
 .cmdk-list .meta .acts { display: none; align-items: center; gap: 2px; margin-right: -4px; }
-.cmdk-list li.sel .meta .acts { display: inline-flex; }
+.cmdk-list li.sel .meta .acts { display: inline-flex; animation: acts-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes acts-in { from { opacity: 0; transform: translateX(6px); } to { opacity: 1; transform: none; } }
 .cmdk-list li.sel .meta:has(.acts) .dur { display: none; }
 .cmdk-list .act {
   display: grid;
@@ -1104,8 +1163,8 @@ body[data-theme="muse"] .cmdk-panel:not(.paused) .cmdk-mark {
   text-overflow: ellipsis;
   opacity: 0;
   pointer-events: none;
-  transform: translate(-50%, 8px);
-  transition: opacity 160ms ease, transform 220ms cubic-bezier(0.2, 0.9, 0.25, 1);
+  transform: translate(-50%, 10px) scale(0.94);
+  transition: opacity 160ms ease, transform 360ms cubic-bezier(0.25, 1.35, 0.4, 1);
   font-variant-numeric: tabular-nums;
 }
 .cmdk-toast.show { opacity: 1; transform: translate(-50%, 0); }
