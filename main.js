@@ -335,17 +335,22 @@ function createWindow() {
     minHeight: 120,
     backgroundColor: themeBg(),
     titleBarStyle: 'customButtonsOnHover',
+    // A non-activating panel (NSPanel), like Spotlight / Raycast: it takes
+    // the keyboard without activating the app, so macOS never has to leave
+    // the Space you're on — including another app's full-screen Space. As an
+    // ordinary window, summoning over full-screen Claude activated the app,
+    // macOS switched to the desktop to show it, the switch blurred it, and
+    // blur hides it: a flash on the wrong Space.
+    ...(process.platform === 'darwin' ? { type: 'panel' } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
     },
   });
-  // Summon on the Space you're on — a desktop or another app's full-screen
-  // Space — instead of macOS switching you to the Space the window was last
-  // shown on (after one summon over a full-screen app, every later ⌥Space
-  // from elsewhere dragged you back there). The window hides on blur, so
-  // "on every Space" only ever means "on the Space you summoned it from".
+  // …and it belongs to every Space, including full-screen ones, so it opens
+  // where you are rather than on the Space it was last shown on. It hides on
+  // blur, so "every Space" only ever means "the Space you summoned it from".
   // skipTransformProcessType: we're already an LSUIElement app.
   if (process.platform === 'darwin') {
     win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
