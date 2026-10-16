@@ -341,6 +341,15 @@ function createWindow() {
       nodeIntegration: false,
     },
   });
+  // Summon on the Space you're on — a desktop or another app's full-screen
+  // Space — instead of macOS switching you to the Space the window was last
+  // shown on (after one summon over a full-screen app, every later ⌥Space
+  // from elsewhere dragged you back there). The window hides on blur, so
+  // "on every Space" only ever means "on the Space you summoned it from".
+  // skipTransformProcessType: we're already an LSUIElement app.
+  if (process.platform === 'darwin') {
+    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
+  }
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   // Dev/test runs (an agent driving the app over CDP, say): MUSEV2_SILENT=1
   // keeps everything working but mutes the output.
