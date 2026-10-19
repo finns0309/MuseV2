@@ -12,6 +12,7 @@ import {
   setRadioSession,
   setAskSession,
   setTimeSession,
+  setPlaylistSession,
 } from './modes/session.js';
 import * as memory from './lib/memory.js';
 import * as sleep from './lib/sleep.js';
@@ -20,6 +21,8 @@ import { fetchSimilar } from './lib/similar.js';
 import { toggleHeart } from './lib/library.js';
 import { api } from './api.js';
 import * as playlist from './playlist.js';
+import * as col from './lib/collections.js';
+import * as dj from './lib/dj.js';
 import { GLYPH } from './glyphs.js';
 import { THEMES, byId as themeById } from './themes.js';
 
@@ -242,14 +245,18 @@ function buildPlaylistEntries(filter) {
       run: () => playlist.load(plId),
     }];
   }
-  const out = saved
+  const out = col.list('playlists')
+    .filter((p) => matches(raw, p.name, p.source?.prompt))
+    .slice(0, LIST_CAP)
+    .map(musePlaylistRow);
+  out.push(...saved
     .filter((p) => matches(raw, p.name))
     .map((p) => ({
-      kind: 'playlist-saved', icon: 'playlist', group: 'Saved',
+      kind: 'playlist-saved', icon: 'playlist', group: 'NetEase',
       title: p.name, desc: `${p.trackCount} tracks`,
       run: () => playlist.load(p.id),
-    }));
-  out.push({ ...note('Add a playlist', 'paste a NetEase link or ID here'), icon: 'plus' });
+    })));
+  out.push({ ...note('Add a playlist', 'paste a NetEase link or ID here'), icon: 'plus', group: 'NetEase' });
   return out;
 }
 
@@ -420,6 +427,19 @@ const SCOPES = [
     items: buildQueueEntries,
   },
   {
+    id: 'asks', aliases: ['ask', 'dj', 'chats'], title: 'Asks', icon: 'spark', group: LISTEN,
+    row() {
+      const asks = col.list('asks');
+      if (!asks.length) return null;
+      const thinking = dj.pending().length;
+      return thinking
+        ? { desc: `${asks.length} so far`, value: 'Thinking…' }
+        : { desc: `${asks.length} so far · last: ${asks[0].title || asks[0].turns[0]?.q || ''}` };
+    },
+    items: buildAskEntries,
+    leaves: () => col.list('asks').slice(0, 40).map((a) => askRow(a)),
+  },
+  {
     id: 'recent', aliases: ['history', 'played', 'last'], title: 'Recently played', icon: 'clock', group: LISTEN,
     row() {
       const r = memory.recent(400);
@@ -440,8 +460,9 @@ const SCOPES = [
   {
     id: 'playlist', aliases: ['pl', 'playlists'], title: 'Playlists', icon: 'playlist', group: LISTEN,
     row() {
-      const n = playlist.getAll().length;
-      return { desc: n ? `${n} saved` : 'paste a NetEase link' };
+      const m = col.list('playlists').length, n = playlist.getAll().length;
+      const parts = [m && `${m} from Muse`, n && `${n} from NetEase`].filter(Boolean);
+      return { desc: parts.length ? parts.join(' · ') : 'paste a NetEase link' };
     },
     items: buildPlaylistEntries,
   },
@@ -610,44 +631,122 @@ export function askEntry(q) {
   };
 }
 
-// The answer: a card (↵ play all · ⌘↵ next · ⇧↵ queue · ⌥↵ try again) and
-// its songs, each of which plays the whole answer starting there.
-export function answerEntries({ q, result, error }) {
-  if (error || !result?.tracks.length) {
+// Play a kept answer — an ask's latest songs — from song k.
+export function playAsk(ask, k = 0) {
+  const turn = dj.lastAnswer(ask);
+  if (!turn) return { warn: 'nothing to play in that one' };
+  player.setQueue(turn.tracks, { startIdx: k });
+  setAskSession({ prompt: turn.q, title: ask.title || turn.title, trackCount: turn.tracks.length, askId: ask.id });
+  return { home: true };
+}
+
+// ⌘↵ / ⇧↵ on a whole answer or playlist: after this song, or at the end.
+// With nothing playing there's nothing to queue behind — just play it.
+function queueAll(tracks, how, label, play) {
+  if (!store.get().player.track) return play();
+  if (how === 'next') for (const t of [...tracks].reverse()) player.playNext(t);
+  else for (const t of tracks) player.enqueue(t);
+  return { ok: `${label} · ${how === 'next' ? 'plays next' : 'added to the queue'}` };
+}
+
+const coversOf = (tracks) => (tracks || []).slice(0, 4).map((t) => t.al?.picUrl).filter(Boolean);
+
+// The answer, from the kept ask: a card (↵ play all · ⌘↵ next · ⇧↵ queue ·
+// ⌥↵ try again) and its songs, each of which plays the whole answer from
+// there. A turn that came back empty or failed is a card that asks again.
+export function answerEntries(ask) {
+  const turn = dj.lastTurn(ask);
+  const again = () => ({ ask: turn.q, againOf: ask.id });
+  if (turn.status === 'error' || !turn.tracks?.length) {
     return [{
       kind: 'answer', icon: 'spark',
-      title: error ? 'Couldn’t ask' : (result?.title || 'Nothing fit'),
-      reply: error || result?.reply || 'Nothing in your listening fits that — try saying it differently.',
+      title: turn.status === 'error' ? 'Couldn’t ask' : (turn.title || 'Nothing fit'),
+      reply: turn.error || turn.reply || 'Nothing in your listening fits that — try saying it differently.',
       covers: [], count: 0,
-      run: () => ({ ask: q, again: !error }),
-      altRun: () => ({ ask: q, again: !error }),
+      run: again, altRun: again,
     }];
   }
-  const { tracks, title } = result;
-  const play = (k) => {
-    player.setQueue(tracks, { startIdx: k });
-    setAskSession({ prompt: q, title, trackCount: tracks.length });
-    return { home: true };
-  };
+  const { tracks } = turn;
+  const title = turn.title || ask.title;
   const card = {
     kind: 'answer', home: true,
-    title, reply: result.reply, count: tracks.length,
-    covers: tracks.slice(0, 4).map((t) => t.al?.picUrl).filter(Boolean),
-    run: () => play(0),
-    nextRun: () => {
-      if (!store.get().player.track) return play(0);
-      for (const t of [...tracks].reverse()) player.playNext(t);
-      return { ok: `${title} · plays next` };
-    },
-    queueRun: () => {
-      if (!store.get().player.track) return play(0);
-      for (const t of tracks) player.enqueue(t);
-      return { ok: `${title} · added to the queue` };
-    },
-    altRun: () => ({ ask: q, again: true }),
+    title, reply: turn.reply, count: tracks.length,
+    covers: coversOf(tracks),
+    run: () => playAsk(ask, 0),
+    nextRun: () => queueAll(tracks, 'next', title, () => playAsk(ask, 0)),
+    queueRun: () => queueAll(tracks, 'queue', title, () => playAsk(ask, 0)),
+    altRun: again,
   };
-  const songs = tracks.map((t, k) => ({ ...songEntry(t, { group: title }), run: () => play(k) }));
+  const songs = tracks.map((t, k) => ({ ...songEntry(t, { group: title }), run: () => playAsk(ask, k) }));
   return [card, ...songs];
+}
+
+// One ask as a row in /asks: its mosaic, the title it got, what you said.
+// ↵ plays it · → opens the conversation · ⌘↵ / ⇧↵ queue it · ⌘⌫ forgets it.
+function askRow(ask, group) {
+  const turn = dj.lastTurn(ask);
+  const thinking = turn?.status === 'thinking';
+  const answer = dj.lastAnswer(ask);
+  const tracks = answer?.tracks || [];
+  // Named by the DJ once it answered; until then (or if it never did), by
+  // what you said.
+  const title = (!thinking && ask.title) || turn?.q || '';
+  const time = new Date(ask.updatedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  return {
+    kind: 'convo', group, thinking,
+    covers: thinking ? [] : coversOf(tracks),
+    title,
+    desc: thinking ? 'thinking…'
+      : turn?.status === 'error' && !answer ? 'didn’t come back — open it to try again'
+      : !answer ? 'nothing fit — open it to try again'
+      : `“${ask.turns[0]?.q || ''}”`,
+    value: tracks.length && !thinking ? `${tracks.length} songs · ${time}` : time,
+    keywords: ask.turns.map((t) => t.q),
+    home: tracks.length > 0 && !thinking,
+    run: () => (tracks.length && !thinking ? playAsk(ask, 0) : { openAsk: ask.id }),
+    openRun: () => ({ openAsk: ask.id }),
+    nextRun: tracks.length ? () => queueAll(tracks, 'next', title, () => playAsk(ask, 0)) : null,
+    queueRun: tracks.length ? () => queueAll(tracks, 'queue', title, () => playAsk(ask, 0)) : null,
+    removeRun: () => { dj.forget(ask.id); return { ok: `forgot · ${title}` }; },
+  };
+}
+
+function buildAskEntries(filter) {
+  const asks = col.list('asks');
+  if (!asks.length) return [note('Nothing asked yet', 'type what you’d like to hear, then ↵ on Ask Muse')];
+  const f = (filter || '').trim();
+  const rows = asks
+    .filter((a) => matches(f, a.title, ...a.turns.map((t) => t.q)))
+    .slice(0, LIST_CAP)
+    .map((a) => askRow(a, memory.dayLabel(a.updatedAt)));
+  return rows.length ? rows : [note('No asks like that')];
+}
+
+// A Muse playlist (one an ask made) as a row in /playlists.
+function musePlaylistRow(pl) {
+  const ask = pl.source?.askId ? col.get('asks', pl.source.askId) : null;
+  const play = (k = 0) => {
+    player.setQueue(pl.tracks, { startIdx: k });
+    if (ask) setAskSession({ prompt: pl.source.prompt, title: pl.name, trackCount: pl.tracks.length, askId: ask.id });
+    else setPlaylistSession({ id: pl.id, name: pl.name, trackCount: pl.tracks.length });
+    return { home: true };
+  };
+  return {
+    kind: 'convo', group: 'Muse', home: true,
+    covers: coversOf(pl.tracks),
+    title: pl.name,
+    desc: pl.source?.prompt ? `“${pl.source.prompt}”` : '',
+    value: `${pl.tracks.length} songs`,
+    run: () => play(0),
+    openRun: ask ? () => ({ openAsk: ask.id }) : null,
+    nextRun: () => queueAll(pl.tracks, 'next', pl.name, () => play(0)),
+    queueRun: () => queueAll(pl.tracks, 'queue', pl.name, () => play(0)),
+    removeRun: () => {
+      col.remove('playlists', pl.id);
+      if (ask?.playlistId === pl.id) col.put('asks', { ...ask, playlistId: null });
+      return { ok: `removed · ${pl.name}` };
+    },
+  };
 }
 
 // `setInput` is injected by cmdk.js so builders can programmatically fill the

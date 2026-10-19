@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, Tray, ipcMain, dialog, globalShortcut, nativeImage, clipboard, protocol } = require('electron');
+const { app, BrowserWindow, Menu, Tray, ipcMain, dialog, globalShortcut, nativeImage, clipboard, protocol, Notification } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
@@ -7,6 +7,7 @@ const { WebSocketServer } = require('ws');
 const { Store } = require('./lib/store');
 const llm = require('./lib/llm').create(path.join(app.getPath('userData'), 'llm.json'));
 const thumbs = require('./lib/thumbs');
+const Collections = require('./lib/collections');
 thumbs.registerScheme(protocol);   // must precede 'ready'
 
 // Name has to be set BEFORE whenReady so it propagates to every place
@@ -201,6 +202,31 @@ ipcMain.handle('store-set', (_, key, value) => {
   catch (e) { console.error('[muse] store-set', key, e); throw e; }
 });
 
+// Asks and Muse playlists (lib/collections.js). Every change is announced to
+// the window, so a change made elsewhere shows up there too.
+let collections = null;
+ipcMain.handle('collections-list', (_, kind) => collections.list(kind));
+ipcMain.handle('collections-put', (_, kind, item) => collections.put(kind, item));
+ipcMain.handle('collections-remove', (_, kind, id) => collections.remove(kind, id));
+function collectionsChanged(kind, id) {
+  if (win && !win.isDestroyed()) win.webContents.send('collections-changed', { kind, id });
+}
+
+// An ask that lands while you're away says so — the DJ's sentence, quietly.
+// Clicking it opens that conversation.
+ipcMain.handle('notify', (_, { title = '', body = '', askId = null } = {}) => {
+  // Test runs (MUSEV2_SILENT) keep quiet here too — and spare the dev binary
+  // a notification-permission prompt.
+  if (process.env.MUSEV2_SILENT) { console.log('[muse] notify', JSON.stringify({ title, askId })); return; }
+  if (!Notification.isSupported()) return;
+  const n = new Notification({ title: String(title).slice(0, 120), body: String(body).slice(0, 300), silent: true });
+  n.on('click', () => {
+    showCommandSurface();
+    if (askId) win.webContents.send('open-ask', String(askId));
+  });
+  n.show();
+});
+
 // Append a single play event. Done in main (not via store-get/set in renderer)
 // so the read-modify-write of the history array is single-threaded — there is
 // only one renderer, but this also keeps trimming logic in one place.
@@ -284,7 +310,10 @@ function trayImage(name) {
 }
 let trayTrackId = null;
 let traySpin = null;
+let trayThink = null;
+let trayRest = 'trayTemplate';
 function spinTray(rest) {
+  if (trayThink) return;          // already turning
   clearInterval(traySpin);
   let frame = 1;
   traySpin = setInterval(() => {
@@ -294,12 +323,30 @@ function spinTray(rest) {
     frame++;
   }, 70);
 }
-ipcMain.handle('tray-state', (_, { title = '', playing = false, trackId = null } = {}) => {
+// While the DJ is thinking the spark keeps turning, slower — eight-fold
+// symmetry again, so five frames and the rest pose make one seamless loop.
+function thinkTray(on) {
+  if (!!trayThink === on) return;
+  clearInterval(trayThink);
+  trayThink = null;
+  if (!on) { if (!traySpin) tray.setImage(trayImage(trayRest)); return; }
+  clearInterval(traySpin); traySpin = null;
+  let frame = 1;
+  trayThink = setInterval(() => {
+    if (!tray || tray.isDestroyed?.()) { clearInterval(trayThink); trayThink = null; return; }
+    tray.setImage(trayImage(frame <= 5 ? `traySpin${frame}Template` : 'trayTemplate'));
+    frame = frame % 6 + 1;
+  }, 120);
+}
+ipcMain.handle('tray-state', (_, { title = '', playing = false, trackId = null, thinking = false } = {}) => {
   if (!tray || tray.isDestroyed?.()) return;
   tray.setTitle(String(title).slice(0, 64), { fontType: 'monospacedDigit' });
   const rest = playing ? 'trayTemplate' : 'trayPausedTemplate';
+  trayRest = rest;
   const changed = trackId && trayTrackId && trackId !== trayTrackId;
   trayTrackId = trackId || trayTrackId;
+  thinkTray(!!thinking);
+  if (trayThink) return;
   if (changed && playing) spinTray(rest);
   else if (!traySpin) tray.setImage(trayImage(rest));
 });
@@ -436,6 +483,7 @@ app.whenReady().then(async () => {
 
   try {
     store = new Store(path.join(app.getPath('userData'), 'data'));
+    collections = Collections.create(store, collectionsChanged);
     await startNcmApi();
     await startNowServer();
   } catch (e) {

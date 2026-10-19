@@ -59,14 +59,16 @@ export function setPlaylistSession({ id, name, trackCount }) {
 }
 
 // A queue the DJ built from a request ("下雨天，安静点的"). Like a playlist it
-// ends when it ends — no mode keeps extending it.
-export function setAskSession({ prompt, title, trackCount }) {
+// ends when it ends — no mode keeps extending it. askId: the conversation it
+// came from (the session label opens it).
+export function setAskSession({ prompt, title, trackCount, askId = null }) {
   store.set({
     playbackSession: {
       kind: 'ask',
       prompt: prompt || '',
       label: title ? `✻ ${title}` : '✻ ask',
       trackCount: trackCount || 0,
+      askId,
       startedAt: Date.now(),
     },
   });

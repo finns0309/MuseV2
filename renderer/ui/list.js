@@ -19,6 +19,7 @@ let entries = [];
 let rowEls = [];          // selectable row <li>s, parallel to entries (excludes section headers)
 let cursor = 0;
 let query = '';           // highlighted in titles
+let legendOverride = null; // render({ legend }) — the key legend for a list with no rows to read it from
 let introPending = false; // the first render after opening staggers its rows in
 
 export function mountList({ list, cursor: cur, keys, execute, scoped, cursorChanged }) {
@@ -65,7 +66,8 @@ export function armIntro() { introPending = true; }
 // re-rendering its ✓, cloud results arriving under a moved cursor).
 // thinking: true (cloud search) or the status line to show ("Picking songs…").
 // prompt: the request echoed as a speech bubble above everything (Ask).
-export function render(next, { query: q = '', thinking = false, emptyText = '', keepCursor = false, prompt = '', motion = null } = {}) {
+// legend: key-legend pairs to show instead of the selected row's.
+export function render(next, { query: q = '', thinking = false, emptyText = '', keepCursor = false, prompt = '', motion = null, legend = null } = {}) {
   if (motion) {
     // Slide the wrapper (rows + cursor box together), then let it go so the
     // idle → search reveal can play on it again later.
@@ -78,6 +80,7 @@ export function render(next, { query: q = '', thinking = false, emptyText = '', 
   }
   entries = next;
   query = q;
+  legendOverride = legend;
   cursor = keepCursor ? Math.min(cursor, Math.max(0, entries.length - 1)) : 0;
   listEl.innerHTML = '';
   rowEls = [];
@@ -250,6 +253,15 @@ function menuRow(li, e) {
     tile.classList.add('swatch');
     tile.style.setProperty('--sw-bg', e.swatch[0]);
     tile.style.setProperty('--sw-ink', e.swatch[1]);
+  } else if (e.kind === 'convo') {
+    // An ask or a Muse playlist: its covers as a tiny mosaic — or, while
+    // the DJ is still on it, the turning spark.
+    if (e.thinking) tile.classList.add('spark', 'turning');
+    else if (e.covers?.length) {
+      tile.classList.add('mosaic');
+      for (const url of e.covers.slice(0, 4)) tile.appendChild(coverImg(url, 64));
+      tile.dataset.n = Math.min(4, e.covers.length);
+    } else tile.classList.add('spark');
   } else if (e.icon === 'spark') {
     tile.classList.add('spark');
   } else tile.innerHTML = icon(e.icon || 'dot');
@@ -344,7 +356,17 @@ function renderKeys() {
   const e = entries[cursor];
   const back = inScope() ? [['⌫', 'Back']] : [];
   let keys = [];
-  if (!e || e.inert) keys = back;
+  if (legendOverride) keys = legendOverride;
+  else if (!e || e.inert) keys = back;
+  else if (e.kind === 'convo') {
+    keys = [
+      ...(e.nextRun || e.home ? [['↵', 'Play']] : [['↵', 'Open']]),
+      ...(e.openRun && (e.nextRun || e.home) ? [['→', 'Open']] : []),
+      ...(e.nextRun ? [['⌘↵', 'Next'], ['⇧↵', 'Queue']] : []),
+      ...(e.removeRun ? [['⌘⌫', 'Remove']] : []),
+      ...back,
+    ];
+  }
   else if (e.submenu) keys = [['↵', 'Open'], ['⇥', 'Open'], ...back];
   else if (e.kind === 'answer') keys = e.count ? [['↵', 'Play all'], ['⌘↵', 'Next'], ['⇧↵', 'Queue'], ['⌥↵', 'Try again']] : [['↵', 'Try again']];
   else if (e.name !== undefined && isPlaying(e)) keys = [['⌥↵', 'Radio from it'], ['⌘D', 'Like'], ['⌘I', 'Info'], ...back];

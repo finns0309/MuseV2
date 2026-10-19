@@ -17,8 +17,10 @@ import { store, actions } from './store.js';
 import * as accent from './accent.js';
 import * as playlist from './playlist.js';
 import * as tx from './transitions.js';
-import { buildCommands, resolveScope, SONG_BUILDERS, ASYNC_BUILDERS, injectSetInput, askEntry, answerEntries } from './commands.js';
+import { buildCommands, resolveScope, SONG_BUILDERS, ASYNC_BUILDERS, injectSetInput, askEntry, answerEntries, playAsk } from './commands.js';
 import * as askLib from './lib/ask.js';
+import * as dj from './lib/dj.js';
+import * as col from './lib/collections.js';
 import { GLYPH } from './glyphs.js';
 import { toggleHeart } from './lib/library.js';
 import * as hero from './ui/hero.js';
@@ -37,8 +39,7 @@ let idleTimer = null;     // staged search → idle transition
 let idleSeq = 0;          // invalidates an in-flight staged transition
 let landing = false;      // Enter → home choreography owns the now-area for a moment
 let askEnabled = false;   // llm.json present (main process) — otherwise no Ask row
-let answer = null;        // { q, status: 'thinking'|'done'|'error', phase, result, error }
-let askSeq = 0;           // invalidates an in-flight Ask
+let view = null;          // an ask the list is showing instead of results: { id, q }
 let phaseTimer = null;
 
 // ---- Window resize ----------------------------------------------------------
@@ -123,6 +124,7 @@ export function mount(el) {
           <button class="cmdk-tool" data-role="slash" title="Commands" aria-label="Commands">/</button>
           <button class="cmdk-tool cmdk-tool--heart" data-role="heart" title="Like (⌘D)" aria-label="Like">${GLYPH.LIKED}</button>
           <span class="cmdk-toolbar__gap"></span>
+          <button class="cmdk-asking" data-role="asking" hidden><span class="cmdk-spark" aria-hidden="true"></span><span></span></button>
           <button class="cmdk-sleep" data-role="sleep" title="Sleep timer" hidden></button>
           <button class="cmdk-session" data-role="session" title="Change mode"></button>
           <button class="cmdk-send" data-role="send" aria-label="Play or pause"></button>
@@ -152,6 +154,7 @@ export function mount(el) {
     refresh: (opts) => refresh(opts),
     runSelected: () => execute(list.getCursor(), 'primary'),
     toggleLike: toggleCurrent,
+    openAsk: (id) => openAsk(id),
   });
   list.mountList({
     list: rootEl.querySelector('.cmdk-list'),
@@ -167,6 +170,14 @@ export function mount(el) {
 
   // Subsystems
   askLib.available().then((on) => { askEnabled = on; });
+  dj.recover();
+  dj.onLanded(landAsk);
+  // An ask moving (thinking → answered, a new one, one forgotten) shows in
+  // whatever list is about asks — the conversation, /asks, /playlists, the
+  // / menu's Asks row.
+  col.onChange(() => { if (showingAsks()) refresh({ keepCursor: true }); });
+  dj.onPending(() => { if (showingAsks()) refresh({ keepCursor: true }); });
+  window.muse.onOpenAsk?.((id) => openAsk(id));
   accent.init(rootEl.querySelector('[data-role=ambient]'));
   playlist.boot();
   injectSetInput((v) => { inputEl.value = v; refresh(); });
@@ -208,7 +219,10 @@ export function mount(el) {
       return;
     }
     if (e.key === 'Escape' && store.get().cmdkOpen) {
-      if (inputEl.value.trim() || composer.getScope()) { composer.reset(); refresh(); }
+      // Leaving an ask that's still thinking is the point: it carries on,
+      // and plays when it's ready.
+      if (view && dj.isThinking(view.id)) doHide();
+      else if (inputEl.value.trim() || composer.getScope()) { composer.reset(); refresh(); }
       else doHide();
     }
   });
@@ -240,7 +254,11 @@ export function mount(el) {
   // after ⌥Space must never be lost — and start from a clean slate: a blur-hide
   // may have left a half-typed query behind.
   window.muse.onWindowAppear?.(() => {
+    view = null;
+    clearTimeout(phaseTimer);
     if (inputEl.value || composer.getScope()) { composer.reset(); list.render([]); setIdle(true, { instant: true }); }
+    composer.renderSend();
+    panelEl.classList.remove('viewing-ask');
     hero.renderGreeting();   // the hour may have turned
     composer.reseatChips();
     tx.animateAppear(panelEl);
@@ -267,10 +285,12 @@ function refresh({ keepCursor = false, motion = null } = {}) {
   const scope = composer.getScope();
   const raw = inputEl.value.trim();
 
-  // An Ask in flight or answered owns the list until the text changes.
-  if (answer && (scope || raw !== answer.q)) cancelAsk();
-  if (answer) {
-    renderAnswer({ keepCursor });
+  // An ask owns the list until the text changes. Changing it only stops
+  // showing the ask — the DJ carries on (lib/dj.js).
+  if (view && (scope || raw !== view.q || !col.get('asks', view.id))) { view = null; clearTimeout(phaseTimer); }
+  panelEl.classList.toggle('viewing-ask', !!view);
+  if (view) {
+    renderView({ keepCursor });
     composer.renderSend();
     setIdle(false);
     searchCtrl?.abort();
@@ -295,8 +315,8 @@ function refresh({ keepCursor = false, motion = null } = {}) {
     }
   }
 
-  const view = { query: q, emptyText: raw ? 'No matches' : '' };
-  list.render(entries, { ...view, thinking: !isCmd && !isAsk && !!q, keepCursor, motion });
+  const shown = { query: q, emptyText: raw ? 'No matches' : '' };
+  list.render(entries, { ...shown, thinking: !isCmd && !isAsk && !!q, keepCursor, motion });
   composer.renderSend();
 
   setIdle(!raw && !scope);
@@ -308,7 +328,7 @@ function refresh({ keepCursor = false, motion = null } = {}) {
 
   let pending = ASYNC_BUILDERS.length;
   const settle = () => {
-    if (ok() && --pending === 0) list.render(entries, { ...view, thinking: false, keepCursor: true });
+    if (ok() && --pending === 0) list.render(entries, { ...shown, thinking: false, keepCursor: true });
   };
   for (const b of ASYNC_BUILDERS) {
     b(q, { signal: searchCtrl.signal, ok })
@@ -320,47 +340,79 @@ function refresh({ keepCursor = false, motion = null } = {}) {
 
 // ---- Ask ---------------------------------------------------------------------
 //
-// Enter on the Ask row (or `?…`) sends the request to the DJ. The list turns
-// into a tiny conversation: your request as a bubble, a turning spark with a
-// status line while it thinks (10–20s on this endpoint), then the answer card
-// and its songs. Editing the text or Esc abandons it.
+// Enter on the Ask row (or `?…`) sends the request to the DJ (lib/dj.js) and
+// the list turns into a tiny conversation: your request as a bubble, a
+// turning spark with a status line while it thinks (10–20s on this
+// endpoint), then the answer card and its songs. The ask runs on its own —
+// Esc, typing, closing the window only stop *showing* it — and is kept, so
+// /asks (and the ✻ session label) can open it again later.
 
 const PHASES = ['Reading your library…', 'Looking back through your months…', 'Picking songs…', 'Putting them in order…'];
+const PHASE_MS = 3200;
 
-function startAsk(q, { again = false } = {}) {
-  const avoid = again && answer?.result ? answer.result.tracks.map((t) => t.id) : [];
-  const seq = ++askSeq;
+function startAsk(q, { againOf = null } = {}) {
+  openAsk(dj.send(q, { againOf }));
+}
+
+function openAsk(id) {
+  const ask = col.get('asks', id);
+  if (!ask) return;
   composer.setScope(null);
-  inputEl.value = q;
-  answer = { q, status: 'thinking', phase: 0 };
-  clearInterval(phaseTimer);
-  phaseTimer = setInterval(() => {
-    if (answer?.status !== 'thinking') return;
-    answer.phase = Math.min(answer.phase + 1, PHASES.length - 1);
-    renderAnswer();
-  }, 3200);
-  refresh();
-  askLib.ask(q, { avoid }).then(
-    (result) => { if (seq === askSeq) finishAsk({ q, status: 'done', result }); },
-    (err) => { if (seq === askSeq) finishAsk({ q, status: 'error', error: err?.message || String(err) }); },
-  );
-}
-
-function finishAsk(next) {
-  clearInterval(phaseTimer);
-  answer = next;
+  view = { id, q: dj.lastTurn(ask)?.q || '' };
+  inputEl.value = view.q;
+  inputEl.focus();
   refresh();
 }
 
-function cancelAsk() {
-  askSeq++;
-  clearInterval(phaseTimer);
-  answer = null;
+function renderView(opts = {}) {
+  const ask = col.get('asks', view.id);
+  const turn = dj.lastTurn(ask);
+  clearTimeout(phaseTimer);
+  if (turn?.status === 'thinking') {
+    const t = Date.now() - turn.at;
+    list.render([], {
+      prompt: turn.q,
+      thinking: PHASES[Math.min(PHASES.length - 1, Math.floor(t / PHASE_MS))],
+      legend: [['esc', 'Leave it with me — it plays when it’s ready']],
+    });
+    const id = view.id;
+    phaseTimer = setTimeout(() => { if (view?.id === id) renderView({ keepCursor: true }); }, PHASE_MS - (t % PHASE_MS));
+    return;
+  }
+  list.render(answerEntries(ask), { prompt: turn.q, ...opts });
 }
 
-function renderAnswer(opts = {}) {
-  if (answer.status === 'thinking') list.render([], { prompt: answer.q, thinking: PHASES[answer.phase] });
-  else list.render(answerEntries(answer), { prompt: answer.q, ...opts });
+// Is the list about asks right now (so an ask changing should redraw it)?
+function showingAsks() {
+  if (!panelEl || panelEl.classList.contains('idle')) return false;
+  const sc = composer.getScope()?.id;
+  return !!view || sc === 'asks' || sc === 'playlist' || (!sc && inputEl.value.trim().startsWith('/'));
+}
+
+// An answer came back. Watching it? It's already on screen (col.onChange
+// redrew the conversation). Otherwise you left it with the DJ: if nothing
+// about the music changed since you asked, it plays — old song fades, new
+// queue in, the session label becomes its title. If you've since picked
+// something else yourself, it doesn't barge in; it's ready in /asks.
+// Away from the window, a notification says which; here, the toast does.
+function landAsk({ ask, turn, sessionAt }) {
+  if (view?.id === ask.id && !document.hidden) return;
+  const title = turn.title || ask.title;
+  if (turn.status !== 'done' || !turn.tracks?.length) {
+    tell(turn.status === 'error' ? 'Couldn’t ask' : `✻ ${title || 'Nothing fit'}`, turn.error || turn.reply || '', ask.id, 'warn');
+    return;
+  }
+  if ((store.get().playbackSession?.startedAt ?? 0) === sessionAt) {
+    playAsk(ask, 0);
+    tell(`✻ ${title}`, turn.reply, ask.id, 'ok');
+  } else {
+    tell(`✻ ${title} is ready`, `${turn.tracks.length} songs — ${turn.reply}`, ask.id, 'ok', '/asks');
+  }
+}
+
+function tell(title, body, askId, tone, where = '') {
+  if (document.hidden) window.muse.notify?.({ title, body, askId });
+  else toast.show(where ? `${title} · ${where}` : title, tone);
 }
 
 // ---- idle ⇄ search morph ------------------------------------------------------
@@ -448,8 +500,9 @@ function onKey(e) {
   if (e.key === 'ArrowUp')   { list.move(-1); e.preventDefault(); return; }
   // Into a submenu: Tab, or → when the caret is already at the end.
   const atEnd = inputEl.selectionStart === inputEl.value.length && inputEl.selectionEnd === inputEl.value.length;
-  if (sel?.submenu && (e.key === 'Tab' || (e.key === 'ArrowRight' && atEnd))) {
-    composer.enterScope(sel.submenu);
+  if ((sel?.submenu || sel?.openRun) && (e.key === 'Tab' || (e.key === 'ArrowRight' && atEnd))) {
+    if (sel.submenu) composer.enterScope(sel.submenu);
+    else execute(list.getCursor(), 'open');
     e.preventDefault();
     return;
   }
@@ -482,11 +535,11 @@ function onKey(e) {
 }
 
 // Variants: primary (↵) · alt (⌥↵, radio) · next (⌘↵) · queue (⇧↵) · heart
-// (⌘-click) · remove (⌘⌫) · up / down (⌥↑↓). An entry without the matching
+// (⌘-click) · remove (⌘⌫) · up / down (⌥↑↓) · open (→ / ⇥ on an ask). An entry without the matching
 // handler falls back to its primary run (a menu row doesn't care about ⌘).
 const VARIANT_RUN = {
   alt: (e) => e.altRun, next: (e) => e.nextRun, queue: (e) => e.queueRun,
-  heart: (e) => e.heartRun, remove: (e) => e.removeRun,
+  heart: (e) => e.heartRun, remove: (e) => e.removeRun, open: (e) => e.openRun,
   up: (e) => e.moveRun && (() => e.moveRun(-1)),
   down: (e) => e.moveRun && (() => e.moveRun(1)),
 };
@@ -507,7 +560,8 @@ function execute(i, variant = 'primary') {
     .then(() => handler())
     .then((res) => {
       if (res?.scope) { composer.enterScope(res.scope); return; }
-      if (res?.ask) { startAsk(res.ask, { again: !!res.again }); return; }
+      if (res?.ask) { startAsk(res.ask, { againOf: res.againOf || null }); return; }
+      if (res?.openAsk) { openAsk(res.openAsk); return; }
       if (res?.ok) toast.show(res.ok, 'ok');
       if (res?.warn) toast.show(res.warn, 'warn');
       if (res?.home && !landedEarly) land();

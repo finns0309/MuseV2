@@ -10,7 +10,7 @@ contextBridge.exposeInMainWorld('muse', {
   onOpenCommandSurface: (cb) => ipcRenderer.on('open-command-surface', () => cb()),
   hideWindow: () => ipcRenderer.invoke('hide-window'),
   copyText: (text) => ipcRenderer.invoke('copy-text', text),
-  // The menu bar: { title ('' = none), playing, trackId } → icon + text.
+  // The menu bar: { title ('' = none), playing, trackId, thinking } → icon + text.
   setTrayState: (state) => ipcRenderer.invoke('tray-state', state),
   resizeWindow: (w, h) => ipcRenderer.invoke('resize-window', w, h),
   setWindowBg: (color) => ipcRenderer.invoke('set-window-bg', color),
@@ -22,6 +22,17 @@ contextBridge.exposeInMainWorld('muse', {
   history: {
     add: (event) => ipcRenderer.invoke('history-add', event),
   },
+  // Asks and Muse playlists, kept by main (lib/collections.js).
+  // kind: 'asks' | 'playlists'. onChange fires for every change, wherever it came from.
+  collections: {
+    list: (kind) => ipcRenderer.invoke('collections-list', kind),
+    put: (kind, item) => ipcRenderer.invoke('collections-put', kind, item),
+    remove: (kind, id) => ipcRenderer.invoke('collections-remove', kind, id),
+    onChange: (cb) => ipcRenderer.on('collections-changed', (_, d) => cb(d)),
+  },
+  // A system notification; clicking it opens the window on that ask.
+  notify: (n) => ipcRenderer.invoke('notify', n),
+  onOpenAsk: (cb) => ipcRenderer.on('open-ask', (_, id) => cb(id)),
   // Ask: an OpenAI-compatible Responses call made by the main process (the
   // key never enters the renderer). respond(body) → { model, output, usage }.
   llm: {

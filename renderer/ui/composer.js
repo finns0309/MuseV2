@@ -14,10 +14,12 @@ import { MODES } from '../modes/index.js';
 import { setTimeSession } from '../modes/session.js';
 import * as memory from '../lib/memory.js';
 import * as sleep from '../lib/sleep.js';
+import * as dj from '../lib/dj.js';
+import * as col from '../lib/collections.js';
 
 let inputEl, scopeEl, sendEl, heartEl, sessionEl, chipsEl;
 let scope = null;         // { id, title }
-let handlers = { refresh() {}, runSelected() {}, toggleLike() {} };
+let handlers = { refresh() {}, runSelected() {}, toggleLike() {}, openAsk() {} };
 
 export const PLACEHOLDER = 'What would you like to hear?';
 const SCOPE_PLACEHOLDER = {
@@ -49,7 +51,26 @@ export function mountComposer(root, h) {
   });
   root.querySelector('[data-role=slash]').addEventListener('click', () => setValue('/'));
   heartEl.addEventListener('click', () => handlers.toggleLike());
-  sessionEl.addEventListener('click', () => setValue('/mode '));
+  // The session label opens what it names: an ask's conversation, else /mode.
+  sessionEl.addEventListener('click', () => {
+    const s = store.get().playbackSession;
+    if (s?.kind === 'ask' && s.askId && col.get('asks', s.askId)) handlers.openAsk(s.askId);
+    else setValue('/mode ');
+  });
+  // ✻ 来点适合深夜… — a request the DJ is still on. Click to look in on it.
+  const askingEl = root.querySelector('[data-role=asking]');
+  askingEl.addEventListener('mousedown', (e) => e.preventDefault());
+  askingEl.addEventListener('click', () => { const id = dj.pending().at(-1); if (id) handlers.openAsk(id); });
+  const renderAsking = () => {
+    const ids = dj.pending();
+    const ask = ids.length ? col.get('asks', ids.at(-1)) : null;
+    const q = dj.lastTurn(ask)?.q || '';
+    askingEl.hidden = !ids.length;
+    askingEl.title = ids.length ? `The DJ is on “${q}” — it plays when it’s ready` : '';
+    askingEl.lastChild.textContent = ids.length > 1 ? `${ids.length} asks` : clip(q, 12);
+  };
+  dj.onPending(renderAsking);
+  renderAsking();
   // ☾ 24m — the sleep timer, when one is set. Click to change or cancel it.
   const sleepEl = root.querySelector('[data-role=sleep]');
   sleepEl.addEventListener('click', () => setValue('/sleep '));
@@ -76,7 +97,10 @@ export function mountComposer(root, h) {
   // Why this queue exists — mode / manual / radio / playlist — always visible.
   store.selectKey(
     (s) => `${s.playbackSession?.kind ?? ''}|${s.playbackSession?.modeId ?? ''}|${s.playbackSession?.label ?? ''}`,
-    (s) => { sessionEl.textContent = sessionText(s.playbackSession); }
+    (s) => {
+      sessionEl.textContent = sessionText(s.playbackSession);
+      sessionEl.title = s.playbackSession?.kind === 'ask' ? 'Open this ask' : 'Change mode';
+    }
   );
   // The send button doubles as play/pause while the input is empty.
   store.selectKey((s) => `${s.player.playing}|${!!s.player.track}`, renderSend);
@@ -206,6 +230,11 @@ function playOnThisDay() {
   if (!day) return;
   player.setQueue(day.tracks, { startIdx: 0 });
   setTimeSession({ kind: 'memory', label: `↺ ${day.label}`, trackCount: day.tracks.length });
+}
+
+function clip(s, n) {
+  const chars = [...String(s || '')];
+  return chars.length > n ? chars.slice(0, n - 1).join('') + '…' : chars.join('');
 }
 
 // The picker reads like a model name: "Daily", "Radio · 夜に駆ける".

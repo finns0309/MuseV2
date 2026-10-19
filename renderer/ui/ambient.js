@@ -1,8 +1,9 @@
 // Ambient — MuseV2 being present when you haven't summoned it.
 //
 //  · The menu bar: the ✻ spark (solid playing, dimmed paused, a quick turn on
-//    a track change — main.js) and the song's title beside it. The title is
-//    off with /appearance → Song in the menu bar; the spark always shows.
+//    a track change, turning on while the DJ is thinking — main.js) and the
+//    song's title beside it. The title is off with /appearance → Song in the
+//    menu bar; the spark always shows.
 //  · The spark: the composer's ✻ breathes with the music — the spectrum's
 //    loudness, smoothed, lands in --level on the panel and the themes that
 //    want it (claude, muse) scale the mark by it.
@@ -12,6 +13,7 @@
 
 import { store } from '../store.js';
 import * as player from '../player.js';
+import * as dj from '../lib/dj.js';
 
 const TITLE_MAX = 24;
 let panelEl = null;
@@ -24,17 +26,17 @@ export function mountAmbient(panel) {
   panelEl = panel;
   mountMediaSession();
 
-  store.selectKey(
-    (s) => `${s.player.track?.id ?? 0}|${s.player.playing}|${s.appearance.menuBar}`,
-    (s) => {
-      const t = s.player.track;
-      window.muse.setTrayState?.({
-        title: s.appearance.menuBar && t?.name ? clip(t.name, TITLE_MAX) : '',
-        playing: !!s.player.playing,
-        trackId: t?.id ?? null,
-      });
-    }
-  );
+  const pushTray = (s = store.get()) => {
+    const t = s.player.track;
+    window.muse.setTrayState?.({
+      title: s.appearance.menuBar && t?.name ? clip(t.name, TITLE_MAX) : '',
+      playing: !!s.player.playing,
+      trackId: t?.id ?? null,
+      thinking: dj.pending().length > 0,
+    });
+  };
+  store.selectKey((s) => `${s.player.track?.id ?? 0}|${s.player.playing}|${s.appearance.menuBar}`, pushTray);
+  dj.onPending(() => pushTray());
 
   // ~30 frames a second while playing. The spectrum's absolute loudness
   // barely moves (rms sits in a narrow 0.65–0.78 band on real music), so the
