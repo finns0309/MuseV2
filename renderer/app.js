@@ -113,6 +113,7 @@ function bootModeRunner() {
   );
 }
 
+let cueFirst = !!window.muse.startPaused;
 async function activateMode(modeId) {
   const mode = byId[modeId] || byId.all;
   const ok = store.race('mode-activate');
@@ -128,7 +129,9 @@ async function activateMode(modeId) {
     return;
   }
   setModeSession(mode.id);
-  player.setQueue(queue, { startIdx: result.startIdx || 0 });
+  // A --paused launch cues the first queue instead of playing it.
+  if (cueFirst) { cueFirst = false; player.cue(queue, { startIdx: result.startIdx || 0 }); }
+  else player.setQueue(queue, { startIdx: result.startIdx || 0 });
   player.setLoop(!!mode.singleLoop);
 }
 

@@ -538,6 +538,14 @@ body[data-theme="claude"][data-scheme="light"] {
   white-space: nowrap;
 }
 .cmdk-scope[hidden] { display: none; }
+/* A conversation's chip (✻ 夜行重拍) — it names the thread rather than a
+   menu, so it can run longer and wears the title face. */
+.cmdk-scope.convo {
+  max-width: 46%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 400;
+}
 .cmdk-mark {
   font-family: var(--font-mono);
   font-size: 17px;
@@ -1089,6 +1097,62 @@ body[data-theme="muse"] .cmdk-panel:not(.paused) .cmdk-mark {
   overflow: hidden;
 }
 .cmdk-list li.answer .meta .acts { display: inline-flex; }
+/* The DJ's three ideas for what to say next — small pills under its line.
+   Click one (or ⇥ it into the input) to say it. */
+.cmdk-list .ans-sugs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 8px;
+}
+.cmdk-list .ans-sug {
+  height: 22px;
+  padding: 0 9px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border, color-mix(in srgb, var(--fg), transparent 88%));
+  background: transparent;
+  color: var(--fg-muted);
+  font-size: 11.5px;
+  white-space: nowrap;
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease, transform 140ms ease;
+  animation: chip-in 320ms cubic-bezier(0.25, 1.45, 0.4, 1) both;
+}
+.cmdk-list .ans-sug:nth-child(2) { animation-delay: 50ms; }
+.cmdk-list .ans-sug:nth-child(3) { animation-delay: 100ms; }
+.cmdk-list .ans-sug:hover {
+  background: color-mix(in srgb, var(--accent), transparent 88%);
+  border-color: color-mix(in srgb, var(--accent), transparent 70%);
+  color: var(--fg);
+}
+.cmdk-list .ans-sug:active { transform: scale(0.96); }
+
+/* The DJ editing a playlist that's still on screen: the rows step back
+   while the thinking line above them works. */
+.cmdk-list.pending li.row { opacity: 0.45; filter: saturate(0.6); transition: opacity 300ms ease, filter 300ms ease; }
+.cmdk-list.pending li.cmdk-thinking { padding-top: 6px; padding-bottom: 10px; }
+
+/* A conversation, drawn above its latest card: your requests on the right
+   (.cmdk-prompt), the DJ's earlier answers on the left, quietly. */
+.cmdk-list li.cmdk-said {
+  display: flex;
+  justify-content: flex-start;
+  align-items: baseline;
+  gap: 8px;
+  min-height: 0;
+  padding: 4px 12px 8px;
+  cursor: default;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--fg-muted);
+  white-space: normal;
+}
+.cmdk-list li.cmdk-said .mark { flex: 0 0 auto; color: var(--accent); }
+.cmdk-list li.cmdk-said .said { max-width: 82%; overflow-wrap: anywhere; }
+.cmdk-list li.cmdk-said b { font-weight: 500; color: var(--fg); }
+.cmdk-list li.cmdk-said .meta { color: var(--fg-dim); }
+.cmdk-list li.cmdk-said.error .said { color: var(--fg-dim); }
+.cmdk-list li.cmdk-prompt { flex-direction: column; align-items: flex-end; gap: 3px; }
+.cmdk-prompt .via { font-size: 10.5px; color: var(--fg-dim); letter-spacing: 0.02em; }
 
 /* ---- ⌘I — the selected song's card beside the list ---- */
 .cmdk-list-wrap.with-info .cmdk-list { margin-right: 236px; }

@@ -19,7 +19,7 @@ import * as col from '../lib/collections.js';
 
 let inputEl, scopeEl, sendEl, heartEl, sessionEl, chipsEl;
 let scope = null;         // { id, title }
-let handlers = { refresh() {}, runSelected() {}, toggleLike() {}, openAsk() {} };
+let handlers = { refresh() {}, runSelected() {}, toggleLike() {}, openAsk() {}, openPlaylist() {} };
 
 export const PLACEHOLDER = 'What would you like to hear?';
 const SCOPE_PLACEHOLDER = {
@@ -51,10 +51,12 @@ export function mountComposer(root, h) {
   });
   root.querySelector('[data-role=slash]').addEventListener('click', () => setValue('/'));
   heartEl.addEventListener('click', () => handlers.toggleLike());
-  // The session label opens what it names: an ask's conversation, else /mode.
+  // The session label opens what it names: an ask's conversation, a Muse
+  // playlist — else /mode.
   sessionEl.addEventListener('click', () => {
     const s = store.get().playbackSession;
     if (s?.kind === 'ask' && s.askId && col.get('asks', s.askId)) handlers.openAsk(s.askId);
+    else if (s?.kind === 'muse-playlist' && col.get('playlists', s.playlistId)) handlers.openPlaylist(s.playlistId);
     else setValue('/mode ');
   });
   // ✻ 来点适合深夜… — a request the DJ is still on. Click to look in on it.
@@ -99,7 +101,8 @@ export function mountComposer(root, h) {
     (s) => `${s.playbackSession?.kind ?? ''}|${s.playbackSession?.modeId ?? ''}|${s.playbackSession?.label ?? ''}`,
     (s) => {
       sessionEl.textContent = sessionText(s.playbackSession);
-      sessionEl.title = s.playbackSession?.kind === 'ask' ? 'Open this ask' : 'Change mode';
+      const k = s.playbackSession?.kind;
+      sessionEl.title = k === 'ask' ? 'Open this conversation' : k === 'muse-playlist' ? 'Open this playlist' : 'Change mode';
     }
   );
   // The send button doubles as play/pause while the input is empty.
@@ -129,13 +132,16 @@ export function mountComposer(root, h) {
 export const input = () => inputEl;
 export const getScope = () => scope;
 
+// sc.placeholder overrides the scope's usual one (a conversation's chip
+// says "Reply…").
 export function setScope(sc) {
   scope = sc || null;
   if (!scopeEl) return;
   scopeEl.hidden = !scope;
   scopeEl.textContent = scope ? scope.title : '';
+  scopeEl.classList.toggle('convo', !!scope?.convo);
   inputEl.placeholder = !scope ? PLACEHOLDER
-    : SCOPE_PLACEHOLDER[scope.id] || `Filter ${scope.title.toLowerCase()}…`;
+    : scope.placeholder || SCOPE_PLACEHOLDER[scope.id] || `Filter ${scope.title.toLowerCase()}…`;
 }
 
 export function enterScope(id) {

@@ -1,5 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+// Asked once, synchronously, before the page runs: which NCM API (the dev
+// profile has its own port) and how this launch starts.
+const config = ipcRenderer.sendSync('muse-config') || {};
+
 contextBridge.exposeInMainWorld('muse', {
   sendPlayerState: (s) => ipcRenderer.send('player-state', s),
   // Structured clone, not JSON — at 30fps the stringify cost shows up.
@@ -15,6 +19,8 @@ contextBridge.exposeInMainWorld('muse', {
   resizeWindow: (w, h) => ipcRenderer.invoke('resize-window', w, h),
   setWindowBg: (color) => ipcRenderer.invoke('set-window-bg', color),
   onWindowAppear: (cb) => ipcRenderer.on('window-appear', () => cb()),
+  onWindowHidden: (cb) => ipcRenderer.on('window-hidden', () => cb()),
+  shownAtStart: config.shownAtStart !== false,
   store: {
     get: (key, fallback) => ipcRenderer.invoke('store-get', key, fallback),
     set: (key, value) => ipcRenderer.invoke('store-set', key, value),
@@ -33,6 +39,11 @@ contextBridge.exposeInMainWorld('muse', {
   // A system notification; clicking it opens the window on that ask.
   notify: (n) => ipcRenderer.invoke('notify', n),
   onOpenAsk: (cb) => ipcRenderer.on('open-ask', (_, id) => cb(id)),
+  // Agents (lib/control.js → renderer/lib/remote.js): a call comes in, a
+  // reply goes back with its id.
+  onRemoteCall: (cb) => ipcRenderer.on('remote-call', (_, c) => cb(c)),
+  remoteReply: (reply) => ipcRenderer.send('remote-reply', reply),
+  controlInfo: () => ipcRenderer.invoke('control-info'),
   // Ask: an OpenAI-compatible Responses call made by the main process (the
   // key never enters the renderer). respond(body) → { model, output, usage }.
   llm: {
@@ -43,5 +54,8 @@ contextBridge.exposeInMainWorld('muse', {
   scrobble: (payload) => ipcRenderer.invoke('scrobble', payload),
   // Cover thumbnails go through main's disk cache (lib/thumbs.js).
   thumbScheme: 'muse-thumb',
-  ncmBase: 'http://127.0.0.1:10764',   // MuseV2's own NCM API port — keep in sync with main.js NCM_PORT
+  ncmBase: config.ncmBase || 'http://127.0.0.1:10764',   // main.js NCM_PORT
+  startPaused: !!config.startPaused,
+  dev: !!config.dev,
+  agentDir: config.agentDir || '',
 });

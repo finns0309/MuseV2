@@ -1,25 +1,33 @@
 // The DJ at work. A request becomes an ask — a conversation main keeps —
 // and runs on its own: closing the window, Esc, typing something else, none
 // of it stops it. When the answer comes it's saved into the ask, the ask's
-// Muse playlist is made (or remade, on a try-again), and onLanded tells
-// whoever cares — cmdk decides whether to show it, play it, or just say it's
-// ready (see cmdk.landAsk).
+// Muse playlist is made (or remade), and onLanded tells whoever cares — cmdk
+// decides whether to show it, play it, or just say it's ready (cmdk.landAsk).
 //
-// lib/ask.js makes the one model call; this file is everything around it.
+// A conversation goes on: a follow-up ("quieter", "more like the third
+// one") is a new turn that edits the conversation's playlist; try again
+// re-rolls the last request. Agents send asks too (renderer/lib/remote.js),
+// signed with their name, and say whether the answer should play.
+//
+// lib/ask.js makes the model calls; this file is everything around them.
 
 import * as askLib from './ask.js';
 import * as col from './collections.js';
 import { store } from '../store.js';
 
-const running = new Map();     // askId → { sessionAt } — the playback session when it was sent
+// askId → { sessionAt, land, progress } — the playback session when it was
+// sent (cmdk plays an answer only if you haven't changed the music since),
+// how it should land ('auto' | 'play' | 'keep'), and what it's doing now.
+const running = new Map();
 const landSubs = new Set();
 const pendingSubs = new Set();
 
 export const pending = () => [...running.keys()];
 export const isThinking = (id) => running.has(id);
+export const progressOf = (id) => running.get(id)?.progress || '';
 export function onLanded(cb) { landSubs.add(cb); return () => landSubs.delete(cb); }
 export function onPending(cb) { pendingSubs.add(cb); return () => pendingSubs.delete(cb); }
-const emitPending = () => { for (const cb of pendingSubs) cb(pending()); };
+const emitPending = () => { for (const cb of pendingSubs) { try { cb(pending()); } catch (e) { console.warn(e); } } };
 
 // The answer an ask stands on: its latest turn that came back with songs.
 export function lastAnswer(ask) {
@@ -31,24 +39,51 @@ export function lastAnswer(ask) {
 }
 export const lastTurn = (ask) => ask?.turns?.[ask.turns.length - 1] || null;
 
-// Send a request. → the ask's id. againOf: an ask to try again in — a new
-// turn in the same conversation, steering away from its last answer.
-export function send(q, { againOf = null } = {}) {
+// The songs a conversation holds now: its playlist (which an agent may
+// have edited since), else its last answer.
+export function tracksOf(ask) {
+  const pl = ask?.playlistId ? col.get('playlists', ask.playlistId) : null;
+  return pl?.tracks?.length ? pl.tracks : (lastAnswer(ask)?.tracks || []);
+}
+
+// Send a request. → the ask's id.
+//   followUpOf  an ask to continue: a new turn that edits its playlist
+//   againOf     an ask to try again: its last request, steering away from
+//               what it holds now
+//   via         who sent it, when it isn't you ('claude-code')
+//   land        'auto' (cmdk decides) · 'play' · 'keep' (never play)
+export function send(q, { followUpOf = null, againOf = null, via = null, land = 'auto' } = {}) {
   const now = Date.now();
-  const prev = againOf ? col.get('asks', againOf) : null;
+  const prevId = followUpOf || againOf;
+  const prev = prevId ? col.get('asks', prevId) : null;
+  if (prev && running.has(prev.id)) throw new Error('the DJ is still on that one');
   const ask = prev
     ? structuredClone(prev)
     : { id: col.newId('ask'), createdAt: now, title: '', playlistId: null, turns: [] };
-  const avoid = (lastAnswer(prev)?.tracks || []).map((t) => t.id);
-  ask.turns.push({ q, at: now, status: 'thinking' });
+  if (via && !ask.via) ask.via = via;
+
+  const before = ask.turns.filter((t) => t.status !== 'thinking');
+  const history = before.map(({ q: tq, title, reply, error }) => ({ q: tq, title, reply, error }));
+  const holds = tracksOf(prev);
+  const opts = againOf
+    ? { history: history.slice(0, -1), avoid: holds.map((t) => t.id) }
+    : { history, current: followUpOf ? holds : [] };
+
+  ask.turns.push({ q, at: now, status: 'thinking', ...(followUpOf ? { follow: true } : {}), ...(via ? { via } : {}) });
   ask.updatedAt = now;
   col.put('asks', ask);
-  running.set(ask.id, { sessionAt: store.get().playbackSession?.startedAt ?? 0 });
+  running.set(ask.id, { sessionAt: store.get().playbackSession?.startedAt ?? 0, land, progress: '' });
   emitPending();
 
-  askLib.ask(q, { avoid }).then(
+  askLib.ask(q, {
+    ...opts,
+    onProgress: (text) => {
+      const job = running.get(ask.id);
+      if (job && job.progress !== text) { job.progress = text; emitPending(); }
+    },
+  }).then(
     (r) => finish(ask.id, {
-      status: 'done', title: r.title, reply: r.reply,
+      status: 'done', title: r.title, reply: r.reply, suggestions: r.suggestions, found: r.found,
       tracks: r.tracks.map(col.compactTrack), model: r.model, ms: r.ms,
     }),
     (e) => finish(ask.id, { status: 'error', error: e?.message || String(e) }),
@@ -72,6 +107,7 @@ function finish(id, outcome) {
   if (outcome.status === 'done' && outcome.tracks.length) {
     const had = ask.playlistId ? col.get('playlists', ask.playlistId) : null;
     const pl = {
+      ...(had || {}),
       id: had?.id || col.newId('mpl'),
       createdAt: had?.createdAt || now,
       updatedAt: now,
@@ -79,14 +115,23 @@ function finish(id, outcome) {
       tracks: outcome.tracks,
       source: { kind: 'ask', askId: ask.id, prompt: ask.turns[0].q },
     };
+    delete pl.editedBy;                          // the DJ's own answer now
     ask.playlistId = pl.id;
     col.put('playlists', pl);
   }
   col.put('asks', ask);
   emitPending();
   for (const cb of landSubs) {
-    try { cb({ ask, turn, sessionAt: job?.sessionAt ?? 0 }); } catch (e) { console.warn('[dj] landed', e); }
+    try { cb({ ask, turn, sessionAt: job?.sessionAt ?? 0, land: job?.land || 'auto' }); } catch (e) { console.warn('[dj] landed', e); }
   }
+}
+
+// Resolves with the ask once its current turn lands.
+export function whenLanded(id) {
+  if (!running.has(id)) return Promise.resolve(col.get('asks', id));
+  return new Promise((resolve) => {
+    const off = onLanded(({ ask }) => { if (ask.id === id) { off(); resolve(ask); } });
+  });
 }
 
 // Forget an ask, and the playlist it made.

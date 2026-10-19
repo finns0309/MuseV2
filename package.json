@@ -39,11 +39,21 @@
       "preload.js",
       "renderer/**/*",
       "lib/**/*",
+      "agent/**/*",
       "assets/**/*",
       "node_modules/**/*"
     ],
     "dmg": {
       "title": "MuseV2"
-    }
+    },
+    "extraResources": [
+      {
+        "from": "agent",
+        "to": "agent"
+      }
+    ]
+  },
+  "bin": {
+    "muse": "agent/cli.js"
   }
 }

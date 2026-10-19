@@ -12,7 +12,7 @@ import {
   setRadioSession,
   setAskSession,
   setTimeSession,
-  setPlaylistSession,
+  setMusePlaylistSession,
 } from './modes/session.js';
 import * as memory from './lib/memory.js';
 import * as sleep from './lib/sleep.js';
@@ -23,6 +23,7 @@ import { api } from './api.js';
 import * as playlist from './playlist.js';
 import * as col from './lib/collections.js';
 import * as dj from './lib/dj.js';
+import * as remote from './lib/remote.js';
 import { GLYPH } from './glyphs.js';
 import { THEMES, byId as themeById } from './themes.js';
 
@@ -411,6 +412,37 @@ function playbackLeaves() {
   return out;
 }
 
+// Agents: how to let Claude Code (or anything that speaks MCP, or a shell)
+// drive Muse, and what they've been up to. ↵ copies the setup line.
+function agentLeaves() {
+  const info = remote.controlInfo();
+  const dir = info?.agentDir || '/Applications/MuseV2.app/Contents/Resources/agent';
+  const q = (p) => `"${p}"`;
+  const copy = (text, what) => () => Promise.resolve(window.muse.copyText?.(text)).then(() => ({ ok: `copied · ${what} — paste it in a terminal` }));
+  const out = [
+    {
+      kind: 'agents', icon: 'sparkle', group: 'Connect',
+      title: 'Add Muse to Claude Code', desc: 'copies the claude mcp add line',
+      keywords: ['mcp', 'claude', 'agent'],
+      run: copy(`claude mcp add --scope user muse -- node ${q(`${dir}/mcp.js`)}`, 'the MCP line'),
+    },
+    {
+      kind: 'agents', icon: 'menubar', group: 'Connect',
+      title: 'Put muse on your PATH', desc: info?.binDir ? `copies a link into ${info.binDir}` : 'copies the path to the CLI',
+      keywords: ['cli', 'terminal', 'command'],
+      run: info?.binDir
+        ? copy(`ln -sf ${q(`${dir}/cli.js`)} ${q(`${info.binDir}/muse`)} && muse`, 'the link line')
+        : copy(`node ${q(`${dir}/cli.js`)}`, 'the CLI path'),
+    },
+  ];
+  const acts = remote.recentActivity();
+  for (const a of acts.slice(0, 12)) {
+    out.push({ ...note(`${a.agent} ${a.summary}`, memory.ago(a.at) === 'today' ? new Date(a.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : memory.ago(a.at)), icon: 'dot', group: 'Lately' });
+  }
+  if (!acts.length) out.push({ ...note('Nothing yet', info?.port ? `listening on 127.0.0.1:${info.port}` : 'the door opens with the app'), group: 'Lately' });
+  return out;
+}
+
 const filterLeaves = (leaves, f) => leaves.filter((e) => matches(f, e.title, e.desc, ...(e.keywords || [])));
 
 // -- scopes --
@@ -520,6 +552,16 @@ const SCOPES = [
     },
     leaves: () => accentLeaves('').filter((e) => !e.inert),
   },
+  {
+    id: 'agents', aliases: ['agent', 'mcp', 'cli', 'claude'], title: 'Agents', icon: 'sparkle', group: 'Connect',
+    row() {
+      const n = remote.recentActivity().length;
+      const last = remote.recentActivity()[0];
+      return { desc: last ? `${last.agent} ${last.summary}` : 'Claude Code and the muse command', value: n ? `${n} lately` : '' };
+    },
+    items: (f) => filterLeaves(agentLeaves(), f),
+    leaves: () => agentLeaves().filter((e) => !e.inert),
+  },
 ];
 
 // The session picker and chips talk about the queue the way a model picker
@@ -626,17 +668,27 @@ function scoreLibrary(q, tracks) {
 export function askEntry(q) {
   return {
     kind: 'ask', icon: 'spark', group: 'Ask Muse',
-    title: `“${q}”`, desc: 'a queue from what you’ve been listening to',
+    title: `“${q}”`, desc: 'from your listening — or anywhere on NetEase',
     run: () => ({ ask: q }),
   };
 }
 
-// Play a kept answer — an ask's latest songs — from song k.
+// Play what an ask holds (its playlist, as edited since) from song k.
 export function playAsk(ask, k = 0) {
-  const turn = dj.lastAnswer(ask);
-  if (!turn) return { warn: 'nothing to play in that one' };
-  player.setQueue(turn.tracks, { startIdx: k });
-  setAskSession({ prompt: turn.q, title: ask.title || turn.title, trackCount: turn.tracks.length, askId: ask.id });
+  const tracks = dj.tracksOf(ask);
+  if (!tracks.length) return { warn: 'nothing to play in that one' };
+  const pl = ask.playlistId ? col.get('playlists', ask.playlistId) : null;
+  player.setQueue(tracks, { startIdx: k });
+  setAskSession({ prompt: ask.turns[0]?.q || '', title: pl?.name || ask.title, trackCount: tracks.length, askId: ask.id });
+  return { home: true };
+}
+
+// Play a Muse playlist from song k — as its conversation when it has one.
+function playMusePlaylist(pl, k = 0) {
+  const ask = pl.source?.kind === 'ask' ? col.get('asks', pl.source.askId) : null;
+  if (ask) return playAsk(ask, k);
+  player.setQueue(pl.tracks, { startIdx: k });
+  setMusePlaylistSession(pl);
   return { home: true };
 }
 
@@ -651,13 +703,60 @@ function queueAll(tracks, how, label, play) {
 
 const coversOf = (tracks) => (tracks || []).slice(0, 4).map((t) => t.al?.picUrl).filter(Boolean);
 
-// The answer, from the kept ask: a card (↵ play all · ⌘↵ next · ⇧↵ queue ·
-// ⌥↵ try again) and its songs, each of which plays the whole answer from
-// there. A turn that came back empty or failed is a card that asks again.
+// Who made a Muse playlist, in a word: the DJ, an agent by name, or you.
+export function madeBy(pl) {
+  if (!pl) return '';
+  if (pl.source?.kind === 'ask') return 'the DJ';
+  if (pl.source?.kind === 'agent') return pl.source.agent || 'an agent';
+  return 'you';
+}
+
+// Edit a Muse playlist's songs by hand (⌘⌫ / ⌥↑↓ in its view). Signed "you".
+function editTracks(plId, fn) {
+  const pl = col.get('playlists', plId);
+  if (!pl) return false;
+  const tracks = fn(pl.tracks.slice());
+  if (!tracks) return false;
+  col.put('playlists', { ...pl, tracks, updatedAt: Date.now(), editedBy: 'you' });
+  return true;
+}
+
+// A playlist's songs as rows that play the whole list from there — and,
+// when the playlist is a Muse one, can be removed (⌘⌫) or moved (⌥↑↓).
+function playlistSongs(tracks, { group, play, plId = null, filter = '' }) {
+  const f = filter.trim().toLowerCase();
+  const out = [];
+  tracks.forEach((t, k) => {
+    if (f && !(t.name || '').toLowerCase().includes(f) && !formatArtists(t).toLowerCase().includes(f)) return;
+    const e = { ...songEntry(t, { group }), run: () => play(k) };
+    if (plId) {
+      e.removeRun = () => (editTracks(plId, (xs) => xs.filter((x) => x.id !== t.id)) ? { ok: `removed · ${t.name}` } : {});
+      e.moveRun = f ? null : (delta) => {
+        const ok = editTracks(plId, (xs) => {
+          const i = xs.findIndex((x) => x.id === t.id), j = i + delta;
+          if (i < 0 || j < 0 || j >= xs.length) return null;
+          [xs[i], xs[j]] = [xs[j], xs[i]];
+          return xs;
+        });
+        return ok ? { cursorDelta: delta } : {};
+      };
+    }
+    out.push(e);
+  });
+  return out;
+}
+
+// The conversation's answer: a card (↵ play all · ⌘↵ next · ⇧↵ queue ·
+// ⌥↵ try again · the DJ's three ideas for what to say next) over the songs
+// it holds now. A turn that came back empty or failed is a card that asks
+// again.
 export function answerEntries(ask) {
   const turn = dj.lastTurn(ask);
   const again = () => ({ ask: turn.q, againOf: ask.id });
-  if (turn.status === 'error' || !turn.tracks?.length) {
+  const tracks = dj.tracksOf(ask);
+  // Nothing to stand on yet — the first answer failed or came back empty.
+  // (A failed follow-up keeps the playlist; its card says what went wrong.)
+  if (!tracks.length) {
     return [{
       kind: 'answer', icon: 'spark',
       title: turn.status === 'error' ? 'Couldn’t ask' : (turn.title || 'Nothing fit'),
@@ -666,19 +765,48 @@ export function answerEntries(ask) {
       run: again, altRun: again,
     }];
   }
-  const { tracks } = turn;
-  const title = turn.title || ask.title;
+  const pl = ask.playlistId ? col.get('playlists', ask.playlistId) : null;
+  const title = pl?.name || ask.title || turn.title;
+  // Counted from your listening now, not when the DJ answered — a follow-up
+  // keeps the discoveries, and a song you've since played isn't new.
+  const lib = new Set(store.get().library.tracks.map((t) => t.id));
+  const fresh = tracks.filter((t) => !lib.has(t.id) && !memory.statsFor(t.id).plays).length;
+  const notes = [
+    fresh ? (fresh === tracks.length ? 'all new to you' : `${fresh} new to you`) : '',
+    pl?.editedBy ? `edited by ${pl.editedBy}` : '',
+  ].filter(Boolean);
   const card = {
     kind: 'answer', home: true,
-    title, reply: turn.reply, count: tracks.length,
+    title,
+    reply: turn.status === 'done' ? turn.reply
+      : turn.status === 'error' ? `Couldn’t do that one — ${turn.error || 'try again'}`
+      : (dj.lastAnswer(ask)?.reply || ''),
+    count: tracks.length, notes,
+    suggestions: turn.status === 'done' ? (turn.suggestions || []) : [],
     covers: coversOf(tracks),
     run: () => playAsk(ask, 0),
     nextRun: () => queueAll(tracks, 'next', title, () => playAsk(ask, 0)),
     queueRun: () => queueAll(tracks, 'queue', title, () => playAsk(ask, 0)),
     altRun: again,
   };
-  const songs = tracks.map((t, k) => ({ ...songEntry(t, { group: title }), run: () => playAsk(ask, k) }));
-  return [card, ...songs];
+  return [card, ...playlistSongs(tracks, { group: title, play: (k) => playAsk(ask, k), plId: pl?.id })];
+}
+
+// A Muse playlist opened on its own (one an agent made, say): its card and
+// its songs, which the input filters.
+export function playlistEntries(pl, filter = '') {
+  const by = madeBy(pl);
+  const card = {
+    kind: 'answer', home: true, title: pl.name,
+    reply: pl.description || `Made by ${by}.`,
+    count: pl.tracks.length,
+    notes: [pl.description ? `by ${by}` : '', pl.editedBy && pl.editedBy !== by ? `edited by ${pl.editedBy}` : ''].filter(Boolean),
+    covers: coversOf(pl.tracks),
+    run: () => playMusePlaylist(pl, 0),
+    nextRun: () => queueAll(pl.tracks, 'next', pl.name, () => playMusePlaylist(pl, 0)),
+    queueRun: () => queueAll(pl.tracks, 'queue', pl.name, () => playMusePlaylist(pl, 0)),
+  };
+  return [card, ...playlistSongs(pl.tracks, { group: pl.name, play: (k) => playMusePlaylist(pl, k), plId: pl.id, filter })];
 }
 
 // One ask as a row in /asks: its mosaic, the title it got, what you said.
@@ -686,20 +814,20 @@ export function answerEntries(ask) {
 function askRow(ask, group) {
   const turn = dj.lastTurn(ask);
   const thinking = turn?.status === 'thinking';
-  const answer = dj.lastAnswer(ask);
-  const tracks = answer?.tracks || [];
+  const tracks = dj.tracksOf(ask);
   // Named by the DJ once it answered; until then (or if it never did), by
   // what you said.
   const title = (!thinking && ask.title) || turn?.q || '';
   const time = new Date(ask.updatedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  const said = ask.turns.length > 1 ? `“${ask.turns[0]?.q || ''}” + ${ask.turns.length - 1} more` : `“${ask.turns[0]?.q || ''}”`;
   return {
     kind: 'convo', group, thinking,
-    covers: thinking ? [] : coversOf(tracks),
+    covers: thinking && !tracks.length ? [] : coversOf(tracks),
     title,
-    desc: thinking ? 'thinking…'
-      : turn?.status === 'error' && !answer ? 'didn’t come back — open it to try again'
-      : !answer ? 'nothing fit — open it to try again'
-      : `“${ask.turns[0]?.q || ''}”`,
+    desc: thinking ? (ask.turns.length > 1 ? `“${turn.q}” · thinking…` : 'thinking…')
+      : turn?.status === 'error' && !tracks.length ? 'didn’t come back — open it to try again'
+      : !tracks.length ? 'nothing fit — open it to try again'
+      : said + (ask.via ? ` · via ${ask.via}` : ''),
     value: tracks.length && !thinking ? `${tracks.length} songs · ${time}` : time,
     keywords: ask.turns.map((t) => t.q),
     home: tracks.length > 0 && !thinking,
@@ -722,25 +850,20 @@ function buildAskEntries(filter) {
   return rows.length ? rows : [note('No asks like that')];
 }
 
-// A Muse playlist (one an ask made) as a row in /playlists.
+// A Muse playlist as a row in /playlists.
 function musePlaylistRow(pl) {
-  const ask = pl.source?.askId ? col.get('asks', pl.source.askId) : null;
-  const play = (k = 0) => {
-    player.setQueue(pl.tracks, { startIdx: k });
-    if (ask) setAskSession({ prompt: pl.source.prompt, title: pl.name, trackCount: pl.tracks.length, askId: ask.id });
-    else setPlaylistSession({ id: pl.id, name: pl.name, trackCount: pl.tracks.length });
-    return { home: true };
-  };
+  const ask = pl.source?.kind === 'ask' ? col.get('asks', pl.source.askId) : null;
+  const by = madeBy(pl);
   return {
     kind: 'convo', group: 'Muse', home: true,
     covers: coversOf(pl.tracks),
     title: pl.name,
-    desc: pl.source?.prompt ? `“${pl.source.prompt}”` : '',
+    desc: pl.source?.prompt ? `“${pl.source.prompt}”` : pl.description || `by ${by}`,
     value: `${pl.tracks.length} songs`,
-    run: () => play(0),
-    openRun: ask ? () => ({ openAsk: ask.id }) : null,
-    nextRun: () => queueAll(pl.tracks, 'next', pl.name, () => play(0)),
-    queueRun: () => queueAll(pl.tracks, 'queue', pl.name, () => play(0)),
+    run: () => playMusePlaylist(pl, 0),
+    openRun: () => (ask ? { openAsk: ask.id } : { openPlaylist: pl.id }),
+    nextRun: () => queueAll(pl.tracks, 'next', pl.name, () => playMusePlaylist(pl, 0)),
+    queueRun: () => queueAll(pl.tracks, 'queue', pl.name, () => playMusePlaylist(pl, 0)),
     removeRun: () => {
       col.remove('playlists', pl.id);
       if (ask?.playlistId === pl.id) col.put('asks', { ...ask, playlistId: null });

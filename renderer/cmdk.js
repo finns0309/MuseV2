@@ -17,10 +17,11 @@ import { store, actions } from './store.js';
 import * as accent from './accent.js';
 import * as playlist from './playlist.js';
 import * as tx from './transitions.js';
-import { buildCommands, resolveScope, SONG_BUILDERS, ASYNC_BUILDERS, injectSetInput, askEntry, answerEntries, playAsk } from './commands.js';
+import { buildCommands, resolveScope, SONG_BUILDERS, ASYNC_BUILDERS, injectSetInput, askEntry, answerEntries, playlistEntries, playAsk } from './commands.js';
 import * as askLib from './lib/ask.js';
 import * as dj from './lib/dj.js';
 import * as col from './lib/collections.js';
+import * as remote from './lib/remote.js';
 import { GLYPH } from './glyphs.js';
 import { toggleHeart } from './lib/library.js';
 import * as hero from './ui/hero.js';
@@ -39,8 +40,15 @@ let idleTimer = null;     // staged search → idle transition
 let idleSeq = 0;          // invalidates an in-flight staged transition
 let landing = false;      // Enter → home choreography owns the now-area for a moment
 let askEnabled = false;   // llm.json present (main process) — otherwise no Ask row
-let view = null;          // an ask the list is showing instead of results: { id, q }
-let phaseTimer = null;
+let view = null;          // a conversation (or a Muse playlist) the list is showing: { kind: 'ask'|'playlist', id }
+let viewFresh = false;    // just opened, or a new turn: anchor the thread on its last bubble
+let viewTurns = 0;        // turns drawn last time — a new one re-anchors
+let ideaIdx = -1;         // ⇥ walks the DJ's follow-up ideas into the input
+let viewWasThinking = false; // the answer arriving under your eyes cascades in
+// Away: the window is hidden. main says so on every hide (document.hidden can
+// lag: a never-shown window, or one hidden while the Mac is locked).
+let away = window.muse.shownAtStart === false;
+const isAway = () => away || document.hidden;
 
 // ---- Window resize ----------------------------------------------------------
 
@@ -152,9 +160,10 @@ export function mount(el) {
   hero.mountHero(rootEl);
   composer.mountComposer(rootEl, {
     refresh: (opts) => refresh(opts),
-    runSelected: () => execute(list.getCursor(), 'primary'),
+    runSelected: () => submit(),
     toggleLike: toggleCurrent,
-    openAsk: (id) => openAsk(id),
+    openAsk: (id) => openView('ask', id),
+    openPlaylist: (id) => openView('playlist', id),
   });
   list.mountList({
     list: rootEl.querySelector('.cmdk-list'),
@@ -163,6 +172,7 @@ export function mount(el) {
     execute,
     scoped: () => !!composer.getScope(),
     cursorChanged: (entry) => info.show(entry),
+    suggest: (text) => followUp(text),
   });
   info.mountInfo(rootEl.querySelector('.cmdk-list-wrap'));
   ambient.mountAmbient(panelEl);
@@ -172,12 +182,14 @@ export function mount(el) {
   askLib.available().then((on) => { askEnabled = on; });
   dj.recover();
   dj.onLanded(landAsk);
+  remote.mount();
+  remote.onActivity(redrawAsks);
   // An ask moving (thinking → answered, a new one, one forgotten) shows in
   // whatever list is about asks — the conversation, /asks, /playlists, the
   // / menu's Asks row.
-  col.onChange(() => { if (showingAsks()) refresh({ keepCursor: true }); });
-  dj.onPending(() => { if (showingAsks()) refresh({ keepCursor: true }); });
-  window.muse.onOpenAsk?.((id) => openAsk(id));
+  col.onChange(redrawAsks);
+  dj.onPending(redrawAsks);
+  window.muse.onOpenAsk?.((id) => openView('ask', id));
   accent.init(rootEl.querySelector('[data-role=ambient]'));
   playlist.boot();
   injectSetInput((v) => { inputEl.value = v; refresh(); });
@@ -219,10 +231,16 @@ export function mount(el) {
       return;
     }
     if (e.key === 'Escape' && store.get().cmdkOpen) {
-      // Leaving an ask that's still thinking is the point: it carries on,
-      // and plays when it's ready.
-      if (view && dj.isThinking(view.id)) doHide();
-      else if (inputEl.value.trim() || composer.getScope()) { composer.reset(); refresh(); }
+      if (view) {
+        // A half-written reply goes first; then the conversation. Leaving one
+        // that's still thinking is the point — it carries on, and plays when
+        // it's ready — so that Esc closes the window outright.
+        if (inputEl.value.trim()) { inputEl.value = ''; refresh(); }
+        else if (view.kind === 'ask' && dj.isThinking(view.id)) doHide();
+        else { closeView(); refresh(); }
+        return;
+      }
+      if (inputEl.value.trim() || composer.getScope()) { composer.reset(); refresh(); }
       else doHide();
     }
   });
@@ -253,12 +271,12 @@ export function mount(el) {
   // Window appear (global hotkey). Focus synchronously — the first keystroke
   // after ⌥Space must never be lost — and start from a clean slate: a blur-hide
   // may have left a half-typed query behind.
+  window.muse.onWindowHidden?.(() => { away = true; });
   window.muse.onWindowAppear?.(() => {
-    view = null;
-    clearTimeout(phaseTimer);
+    away = false;
+    closeView();
     if (inputEl.value || composer.getScope()) { composer.reset(); list.render([]); setIdle(true, { instant: true }); }
     composer.renderSend();
-    panelEl.classList.remove('viewing-ask');
     hero.renderGreeting();   // the hour may have turned
     composer.reseatChips();
     tx.animateAppear(panelEl);
@@ -285,12 +303,11 @@ function refresh({ keepCursor = false, motion = null } = {}) {
   const scope = composer.getScope();
   const raw = inputEl.value.trim();
 
-  // An ask owns the list until the text changes. Changing it only stops
-  // showing the ask — the DJ carries on (lib/dj.js).
-  if (view && (scope || raw !== view.q || !col.get('asks', view.id))) { view = null; clearTimeout(phaseTimer); }
-  panelEl.classList.toggle('viewing-ask', !!view);
+  // A conversation owns the list while it's open — its chip in the input
+  // row, the input its reply box. Leaving it never stops the DJ (lib/dj.js).
+  if (view && !col.get(view.kind === 'ask' ? 'asks' : 'playlists', view.id)) closeView();
   if (view) {
-    renderView({ keepCursor });
+    renderView();
     composer.renderSend();
     setIdle(false);
     searchCtrl?.abort();
@@ -341,52 +358,153 @@ function refresh({ keepCursor = false, motion = null } = {}) {
 // ---- Ask ---------------------------------------------------------------------
 //
 // Enter on the Ask row (or `?…`) sends the request to the DJ (lib/dj.js) and
-// the list turns into a tiny conversation: your request as a bubble, a
-// turning spark with a status line while it thinks (10–20s on this
-// endpoint), then the answer card and its songs. The ask runs on its own —
-// Esc, typing, closing the window only stop *showing* it — and is kept, so
-// /asks (and the ✻ session label) can open it again later.
-
-const PHASES = ['Reading your library…', 'Looking back through your months…', 'Picking songs…', 'Putting them in order…'];
-const PHASE_MS = 3200;
+// opens the conversation: a chip names it (✻ 夜行重拍), your requests are
+// bubbles, the DJ's earlier answers quiet lines, and the latest answer a card
+// over its songs. The input becomes the reply box — say "quieter" and the DJ
+// edits the playlist; ⇥ walks its own ideas into the input. While it thinks
+// the spark turns and the line says what it's doing ("Searching NetEase for
+// “Sparkle”…"). Esc, ⌫ back to /asks, closing the window — none of it stops
+// the DJ; the ask is kept, and the ✻ session label opens it again later.
 
 function startAsk(q, { againOf = null } = {}) {
-  openAsk(dj.send(q, { againOf }));
+  try { openView('ask', dj.send(q, { againOf })); }
+  catch (e) { toast.show(e.message, 'warn'); }
 }
 
-function openAsk(id) {
-  const ask = col.get('asks', id);
-  if (!ask) return;
-  composer.setScope(null);
-  view = { id, q: dj.lastTurn(ask)?.q || '' };
-  inputEl.value = view.q;
+// A reply in an open conversation: the DJ takes it as a follow-up.
+function followUp(text) {
+  const q = String(text || '').trim();
+  if (!q || view?.kind !== 'ask') return;
+  try { dj.send(q, { followUpOf: view.id }); }
+  catch (e) { toast.show(e.message, 'warn'); return; }
+  inputEl.value = '';
+  ideaIdx = -1;
+  viewFresh = true;
+  refresh();
+}
+
+// Enter, or the send button: in a conversation with something typed, that's
+// a reply; otherwise the selected row runs.
+function submit() {
+  if (view?.kind === 'ask' && inputEl.value.trim()) followUp(inputEl.value);
+  else execute(list.getCursor(), 'primary');
+}
+
+function openView(kind, id) {
+  const item = col.get(kind === 'ask' ? 'asks' : 'playlists', id);
+  if (!item) return;
+  view = { kind, id };
+  viewFresh = true;
+  ideaIdx = -1;
+  list.armIntro();
+  inputEl.value = '';
+  setViewChip();
+  panelEl.classList.add('viewing-ask');
   inputEl.focus();
   refresh();
 }
 
-function renderView(opts = {}) {
-  const ask = col.get('asks', view.id);
-  const turn = dj.lastTurn(ask);
-  clearTimeout(phaseTimer);
-  if (turn?.status === 'thinking') {
-    const t = Date.now() - turn.at;
-    list.render([], {
-      prompt: turn.q,
-      thinking: PHASES[Math.min(PHASES.length - 1, Math.floor(t / PHASE_MS))],
-      legend: [['esc', 'Leave it with me — it plays when it’s ready']],
-    });
-    const id = view.id;
-    phaseTimer = setTimeout(() => { if (view?.id === id) renderView({ keepCursor: true }); }, PHASE_MS - (t % PHASE_MS));
+function closeView() {
+  if (!view) return;
+  view = null;
+  ideaIdx = -1;
+  viewWasThinking = false;
+  panelEl.classList.remove('viewing-ask');
+  if (composer.getScope()?.convo) composer.setScope(null);
+}
+
+// The chip in the input row says whose conversation this is; the
+// placeholder offers the DJ's first idea as an example reply.
+function setViewChip() {
+  if (!view) return;
+  if (view.kind === 'playlist') {
+    const pl = col.get('playlists', view.id);
+    composer.setScope({ id: 'convo', convo: true, title: `♪ ${pl?.name || ''}`, placeholder: 'Filter these songs…' });
     return;
   }
-  list.render(answerEntries(ask), { prompt: turn.q, ...opts });
+  const ask = col.get('asks', view.id);
+  const pl = ask?.playlistId ? col.get('playlists', ask.playlistId) : null;
+  const title = pl?.name || ask?.title || 'Asking';
+  const idea = dj.lastTurn(ask)?.suggestions?.[0];
+  composer.setScope({
+    id: 'convo', convo: true, title: `✻ ${title}`,
+    placeholder: dj.isThinking(ask?.id) ? 'The DJ is thinking — Esc, and it plays when it’s ready'
+      : idea ? `Reply — “${idea}”…` : 'Reply — quieter, more like the first one…',
+  });
+}
+
+function renderView() {
+  const fresh = viewFresh;
+  viewFresh = false;
+  setViewChip();
+  if (view.kind === 'playlist') {
+    const pl = col.get('playlists', view.id);
+    list.render(playlistEntries(pl, inputEl.value), { keepCursor: !fresh, query: inputEl.value.trim() });
+    return;
+  }
+  const ask = col.get('asks', view.id);
+  const turns = ask.turns;
+  const latest = turns[turns.length - 1];
+  const anchor = fresh || turns.length !== viewTurns;
+  viewTurns = turns.length;
+  const before = [];
+  turns.forEach((t, i) => {
+    before.push({ kind: 'bubble', text: t.q, via: t.via });
+    if (i < turns.length - 1) {
+      before.push({
+        kind: 'said', error: t.status === 'error',
+        title: t.status === 'error' ? '' : t.title,
+        text: t.status === 'error' ? `Couldn’t answer — ${t.error || ''}` : t.reply || '',
+        meta: t.tracks?.length ? `${t.tracks.length} songs` : '',
+      });
+    }
+  });
+  const typing = !!inputEl.value.trim();
+  if (latest.status === 'thinking') {
+    viewWasThinking = true;
+    // A follow-up keeps the playlist in view, dimmed, under the line saying
+    // what the DJ is doing to it; a first ask has only the line.
+    const holds = dj.tracksOf(ask).length ? answerEntries(ask) : [];
+    list.render(holds, {
+      before, anchor, keepCursor: !fresh, thinkingFirst: true,
+      thinking: dj.progressOf(ask.id) || 'Reading your library…',
+      legend: [['esc', 'Leave it with me — it plays when it’s ready']],
+    });
+    return;
+  }
+  if (viewWasThinking) { viewWasThinking = false; list.armIntro(); }
+  list.render(answerEntries(ask), {
+    before, anchor, keepCursor: !fresh,
+    legend: typing ? [['↵', 'Send to the DJ'], ['esc', 'Clear']] : null,
+  });
+}
+
+// ⇥ with nothing typed: the DJ's next idea into the input, ready to send.
+function nextIdea() {
+  if (view?.kind !== 'ask') return false;
+  const ideas = dj.lastTurn(col.get('asks', view.id))?.suggestions || [];
+  if (!ideas.length || (inputEl.value.trim() && !ideas.includes(inputEl.value.trim()))) return false;
+  ideaIdx = (ideaIdx + 1) % ideas.length;
+  inputEl.value = ideas[ideaIdx];
+  inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length);
+  refresh();
+  return true;
+}
+
+// An ask landing changes several things at once (its playlist, itself, the
+// pending set) — one redraw for the lot, so an arriving answer's rows can
+// cascade in without the next redraw cutting them off.
+let redrawTimer = null;
+function redrawAsks() {
+  clearTimeout(redrawTimer);
+  redrawTimer = setTimeout(() => { if (showingAsks()) refresh({ keepCursor: true }); }, 0);
 }
 
 // Is the list about asks right now (so an ask changing should redraw it)?
 function showingAsks() {
   if (!panelEl || panelEl.classList.contains('idle')) return false;
   const sc = composer.getScope()?.id;
-  return !!view || sc === 'asks' || sc === 'playlist' || (!sc && inputEl.value.trim().startsWith('/'));
+  return !!view || sc === 'asks' || sc === 'playlist' || sc === 'agents' || (!sc && inputEl.value.trim().startsWith('/'));
 }
 
 // An answer came back. Watching it? It's already on screen (col.onChange
@@ -395,15 +513,26 @@ function showingAsks() {
 // queue in, the session label becomes its title. If you've since picked
 // something else yourself, it doesn't barge in; it's ready in /asks.
 // Away from the window, a notification says which; here, the toast does.
-function landAsk({ ask, turn, sessionAt }) {
-  if (view?.id === ask.id && !document.hidden) return;
+//
+// An agent's ask lands its own way: 'play' plays it (the agent was told
+// to), 'keep' only keeps it — the agent reports back itself.
+function landAsk({ ask, turn, sessionAt, land }) {
+  if (view?.kind === 'ask' && view.id === ask.id && !isAway()) return;
   const title = turn.title || ask.title;
-  if (turn.status !== 'done' || !turn.tracks?.length) {
+  const failed = turn.status !== 'done' || !turn.tracks?.length;
+  if (land === 'keep') {
+    if (!isAway() && !failed) toast.show(`✻ ${title} · made for ${turn.via || 'an agent'}`, 'ok');
+    return;
+  }
+  if (failed) {
     tell(turn.status === 'error' ? 'Couldn’t ask' : `✻ ${title || 'Nothing fit'}`, turn.error || turn.reply || '', ask.id, 'warn');
     return;
   }
-  if ((store.get().playbackSession?.startedAt ?? 0) === sessionAt) {
-    playAsk(ask, 0);
+  if (land === 'play' || (store.get().playbackSession?.startedAt ?? 0) === sessionAt) {
+    // An edit to what's already playing ("quieter") keeps the current song
+    // going if it survived the edit — the new list just closes around it.
+    const cur = store.get().player.track?.id;
+    playAsk(ask, Math.max(0, dj.tracksOf(ask).findIndex((t) => t.id === cur)));
     tell(`✻ ${title}`, turn.reply, ask.id, 'ok');
   } else {
     tell(`✻ ${title} is ready`, `${turn.tracks.length} songs — ${turn.reply}`, ask.id, 'ok', '/asks');
@@ -411,7 +540,7 @@ function landAsk({ ask, turn, sessionAt }) {
 }
 
 function tell(title, body, askId, tone, where = '') {
-  if (document.hidden) window.muse.notify?.({ title, body, askId });
+  if (isAway()) window.muse.notify?.({ title, body, askId });
   else toast.show(where ? `${title} · ${where}` : title, tone);
 }
 
@@ -470,6 +599,7 @@ function land() {
   landing = true;
   list.flashCommit();
   setTimeout(() => {
+    closeView();
     composer.reset();
     refresh();
   }, 90);
@@ -498,6 +628,19 @@ function onKey(e) {
   }
   if (e.key === 'ArrowDown') { list.move(1); e.preventDefault(); return; }
   if (e.key === 'ArrowUp')   { list.move(-1); e.preventDefault(); return; }
+  // In a conversation: ⇥ brings in the DJ's ideas; ⌫ / ← at the very start
+  // of an empty reply steps back out to the list it came from.
+  if (view) {
+    if (e.key === 'Tab' && !e.shiftKey && nextIdea()) { e.preventDefault(); return; }
+    if (!inputEl.value && (e.key === 'Backspace' || e.key === 'ArrowLeft')) {
+      const back = view.kind === 'ask' ? 'asks' : 'playlist';
+      closeView();
+      composer.setScope(resolveScope(back));
+      refresh({ motion: 'back' });
+      e.preventDefault();
+      return;
+    }
+  }
   // Into a submenu: Tab, or → when the caret is already at the end.
   const atEnd = inputEl.selectionStart === inputEl.value.length && inputEl.selectionEnd === inputEl.value.length;
   if ((sel?.submenu || sel?.openRun) && (e.key === 'Tab' || (e.key === 'ArrowRight' && atEnd))) {
@@ -509,7 +652,7 @@ function onKey(e) {
   // Out of one: Backspace / ← at the very start drops the chip (the text
   // stays, now searching every command).
   const atStart = inputEl.selectionStart === 0 && inputEl.selectionEnd === 0;
-  if (composer.getScope() && atStart && (e.key === 'Backspace' || e.key === 'ArrowLeft')) {
+  if (composer.getScope() && !view && atStart && (e.key === 'Backspace' || e.key === 'ArrowLeft')) {
     const rest = inputEl.value;
     composer.setScope(null);
     inputEl.value = '/' + rest;
@@ -529,7 +672,8 @@ function onKey(e) {
   // act on the highlighted row here, or it'd double-fire.
   if (e.key === 'Enter') {
     const variant = e.altKey ? 'alt' : e.metaKey ? 'next' : e.shiftKey ? 'queue' : 'primary';
-    execute(list.getCursor(), variant);
+    if (variant === 'primary') submit();
+    else execute(list.getCursor(), variant);
     e.preventDefault();
   }
 }
@@ -560,8 +704,15 @@ function execute(i, variant = 'primary') {
     .then(() => handler())
     .then((res) => {
       if (res?.scope) { composer.enterScope(res.scope); return; }
-      if (res?.ask) { startAsk(res.ask, { againOf: res.againOf || null }); return; }
-      if (res?.openAsk) { openAsk(res.openAsk); return; }
+      if (res?.ask) {
+        if (res.againOf) {
+          try { dj.send(res.ask, { againOf: res.againOf }); openView('ask', res.againOf); }
+          catch (e) { toast.show(e.message, 'warn'); }
+        } else startAsk(res.ask);
+        return;
+      }
+      if (res?.openAsk) { openView('ask', res.openAsk); return; }
+      if (res?.openPlaylist) { openView('playlist', res.openPlaylist); return; }
       if (res?.ok) toast.show(res.ok, 'ok');
       if (res?.warn) toast.show(res.warn, 'warn');
       if (res?.home && !landedEarly) land();

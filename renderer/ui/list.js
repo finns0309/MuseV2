@@ -21,9 +21,11 @@ let cursor = 0;
 let query = '';           // highlighted in titles
 let legendOverride = null; // render({ legend }) — the key legend for a list with no rows to read it from
 let introPending = false; // the first render after opening staggers its rows in
+let onSuggest = () => {};   // a follow-up chip on an answer card was clicked
 
-export function mountList({ list, cursor: cur, keys, execute, scoped, cursorChanged }) {
+export function mountList({ list, cursor: cur, keys, execute, scoped, cursorChanged, suggest }) {
   listEl = list;
+  onSuggest = suggest || onSuggest;
   cursorEl = cur;
   keysEl = keys;
   onExecute = execute;
@@ -67,7 +69,13 @@ export function armIntro() { introPending = true; }
 // thinking: true (cloud search) or the status line to show ("Picking songs…").
 // prompt: the request echoed as a speech bubble above everything (Ask).
 // legend: key-legend pairs to show instead of the selected row's.
-export function render(next, { query: q = '', thinking = false, emptyText = '', keepCursor = false, prompt = '', motion = null, legend = null } = {}) {
+// before: a conversation's earlier lines, drawn above the rows and never
+//   selectable — { kind: 'bubble', text, via } (you) or { kind: 'said',
+//   title, text, meta, error } (the DJ). anchor: scroll so the last bubble
+//   sits at the top (a conversation just opened, or a new turn).
+// thinkingFirst: the thinking line goes above the rows (the DJ editing the
+//   playlist that's still shown, dimmed, beneath it).
+export function render(next, { query: q = '', thinking = false, emptyText = '', keepCursor = false, prompt = '', motion = null, legend = null, before = [], anchor = false, thinkingFirst = false } = {}) {
   if (motion) {
     // Slide the wrapper (rows + cursor box together), then let it go so the
     // idle → search reveal can play on it again later.
@@ -82,9 +90,19 @@ export function render(next, { query: q = '', thinking = false, emptyText = '', 
   query = q;
   legendOverride = legend;
   cursor = keepCursor ? Math.min(cursor, Math.max(0, entries.length - 1)) : 0;
+  const scrollWas = listEl.scrollTop;
   listEl.innerHTML = '';
   rowEls = [];
+  for (const b of before) listEl.appendChild(b.kind === 'said' ? saidRow(b) : promptRow(b.text, b.via));
   if (prompt) listEl.appendChild(promptRow(prompt));
+  listEl.classList.toggle('pending', !!(thinking && thinkingFirst && entries.length));
+  if (thinking && thinkingFirst && entries.length) listEl.appendChild(thinkingRow(thinking));
+  const settle = () => {
+    if (anchor) {
+      const last = [...listEl.querySelectorAll('.cmdk-prompt')].pop();
+      listEl.scrollTop = last ? Math.max(0, last.offsetTop - 6) : 0;
+    } else if (before.length || keepCursor) listEl.scrollTop = scrollWas;
+  };
   if (!entries.length) {
     if (thinking) listEl.appendChild(thinkingRow(thinking));
     else if (emptyText) {
@@ -93,6 +111,7 @@ export function render(next, { query: q = '', thinking = false, emptyText = '', 
       li.textContent = emptyText;
       listEl.appendChild(li);
     }
+    settle();
     seat(false);
     renderKeys();
     return;
@@ -136,7 +155,8 @@ export function render(next, { query: q = '', thinking = false, emptyText = '', 
     listEl.appendChild(li);
     rowEls.push(li);
   });
-  if (thinking) listEl.appendChild(thinkingRow(thinking));
+  if (thinking && !thinkingFirst) listEl.appendChild(thinkingRow(thinking));
+  settle();
   seat(false);
   renderKeys();
 }
@@ -201,12 +221,28 @@ function answerRow(li, e, i) {
   const head = document.createElement('div'); head.className = 'ans-head';
   const ttl = document.createElement('span'); ttl.className = 'ans-title'; ttl.textContent = e.title;
   head.append(ttl);
-  if (e.count) { const n = document.createElement('span'); n.className = 'ans-count'; n.textContent = `${e.count} songs`; head.append(n); }
+  if (e.count) {
+    const n = document.createElement('span'); n.className = 'ans-count';
+    n.textContent = [`${e.count} songs`, ...(e.notes || [])].join(' · ');
+    head.append(n);
+  }
   const reply = document.createElement('div'); reply.className = 'ans-reply'; reply.textContent = e.reply || '';
   body.append(head, reply);
+  // What you might say next — the DJ's own three ideas. Click one to say it.
+  if (e.suggestions?.length) {
+    const sugs = document.createElement('div'); sugs.className = 'ans-sugs';
+    for (const text of e.suggestions) {
+      const b = document.createElement('button');
+      b.className = 'ans-sug'; b.textContent = text; b.title = `Say “${text}”`;
+      b.addEventListener('mousedown', (ev) => ev.preventDefault());
+      b.addEventListener('click', (ev) => { ev.stopPropagation(); onSuggest(text); });
+      sugs.append(b);
+    }
+    body.append(sugs);
+  }
   const meta = document.createElement('span'); meta.className = 'meta';
   const acts = e.count
-    ? [['primary', 'play', 'Play all  ↵'], ['next', 'next', 'Play next  ⌘↵'], ['queue', 'listPlus', 'Add to queue  ⇧↵'], ['alt', 'refresh', 'Try again  ⌥↵']]
+    ? [['primary', 'play', 'Play all  ↵'], ['next', 'next', 'Play next  ⌘↵'], ['queue', 'listPlus', 'Add to queue  ⇧↵'], ...(e.altRun ? [['alt', 'refresh', 'Try again  ⌥↵']] : [])]
     : [['alt', 'refresh', 'Try again  ⌥↵']];
   const box = document.createElement('span'); box.className = 'acts';
   for (const [variant, ic, label] of acts) {
@@ -223,11 +259,26 @@ function answerRow(li, e, i) {
 
 // What you asked, echoed as a speech bubble on the right — the conversation
 // shape Ask borrows from a chat. Not a row: the cursor never lands on it.
-function promptRow(text) {
+function promptRow(text, via = '') {
   const li = document.createElement('li');
   li.className = 'cmdk-prompt';
+  if (via) { const v = document.createElement('span'); v.className = 'via'; v.textContent = `via ${via}`; li.append(v); }
   const b = document.createElement('span'); b.className = 'bubble'; b.textContent = text;
   li.append(b);
+  return li;
+}
+
+// What the DJ said on an earlier turn: ✻ title — its line · N songs. Quiet,
+// left-aligned, the other side of the conversation from your bubbles.
+function saidRow({ title = '', text = '', meta = '', error = false }) {
+  const li = document.createElement('li');
+  li.className = 'cmdk-said' + (error ? ' error' : '');
+  const mark = document.createElement('span'); mark.className = 'mark'; mark.textContent = '✻';
+  const body = document.createElement('span'); body.className = 'said';
+  if (title) { const t = document.createElement('b'); t.textContent = title; body.append(t, document.createTextNode(' — ')); }
+  body.append(document.createTextNode(text));
+  if (meta) { const m = document.createElement('span'); m.className = 'meta'; m.textContent = ` · ${meta}`; body.append(m); }
+  li.append(mark, body);
   return li;
 }
 
@@ -282,7 +333,10 @@ function coverImg(url, px, fallback = () => {}) {
   const img = new Image();
   img.alt = ''; img.loading = 'lazy'; img.decoding = 'async';
   let retried = false;
+  // A failed load stays invisible while it retries — no broken-image glyph.
+  img.onload = () => { img.style.visibility = ''; };
   img.onerror = () => {
+    img.style.visibility = 'hidden';
     if (!retried) {
       retried = true;
       const again = thumbUrl(url, px);
@@ -368,7 +422,11 @@ function renderKeys() {
     ];
   }
   else if (e.submenu) keys = [['↵', 'Open'], ['⇥', 'Open'], ...back];
-  else if (e.kind === 'answer') keys = e.count ? [['↵', 'Play all'], ['⌘↵', 'Next'], ['⇧↵', 'Queue'], ['⌥↵', 'Try again']] : [['↵', 'Try again']];
+  else if (e.kind === 'answer') {
+    keys = e.count ? [['↵', 'Play all'], ['⌘↵', 'Next'], ['⇧↵', 'Queue'], ...(e.altRun ? [['⌥↵', 'Try again']] : [])] : [['↵', 'Try again']];
+    if (e.suggestions?.length) keys.push(['⇥', 'An idea']);
+    keys.push(...back);
+  }
   else if (e.name !== undefined && isPlaying(e)) keys = [['⌥↵', 'Radio from it'], ['⌘D', 'Like'], ['⌘I', 'Info'], ...back];
   else if (e.moveRun) keys = [['↵', 'Play'], ['⌘↵', 'Next'], ['⌥↑↓', 'Move'], ['⌘⌫', 'Remove'], ['⌘I', 'Info'], ...back];
   else if (e.name !== undefined) keys = [['↵', 'Play'], ['⌘↵', 'Next'], ['⇧↵', 'Queue'], ['⌥↵', 'Radio'], ['⌘I', 'Info'], ...back];

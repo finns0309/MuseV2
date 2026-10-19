@@ -271,7 +271,10 @@ async function renderContext(t) {
     const [y, m] = peak.month.split('-').map(Number);
     bits.push(`most in ${new Date(y, m - 1, 1).toLocaleDateString('en', { month: 'long' })}`);
   } else if (!lib && s.firstAt) bits.push(`first heard ${memory.ago(s.firstAt)}`);
-  contextEl.textContent = bits.length ? bits.join(' · ') : 'New to you';
+  // A song the DJ went and found for you says so.
+  const s2 = store.get().playbackSession;
+  const found = !bits.length && s2?.kind === 'ask';
+  contextEl.textContent = bits.length ? bits.join(' · ') : found ? 'New to you — the DJ found it' : 'New to you';
 }
 
 export function fmtTime(sec) {

@@ -9,7 +9,7 @@ import { byId } from './index.js';
 
 const DEFAULT_EXTEND_LIMIT = 40;
 // Sessions whose queue is the whole story — nothing extends them at the end.
-const FINITE_SESSIONS = new Set(['manual', 'playlist', 'ask', 'era', 'memory']);
+const FINITE_SESSIONS = new Set(['manual', 'playlist', 'muse-playlist', 'ask', 'era', 'memory']);
 
 export function setModeSession(modeId) {
   const mode = byId[modeId] || byId.all;
@@ -69,6 +69,19 @@ export function setAskSession({ prompt, title, trackCount, askId = null }) {
       label: title ? `✻ ${title}` : '✻ ask',
       trackCount: trackCount || 0,
       askId,
+      startedAt: Date.now(),
+    },
+  });
+}
+
+// A Muse playlist — one an agent made, or you did. Ends when it ends.
+export function setMusePlaylistSession(pl) {
+  store.set({
+    playbackSession: {
+      kind: 'muse-playlist',
+      playlistId: pl.id,
+      label: `♪ ${pl.name}`,
+      trackCount: pl.tracks?.length || 0,
       startedAt: Date.now(),
     },
   });

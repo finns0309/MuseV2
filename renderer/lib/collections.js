@@ -22,11 +22,15 @@ export function boot() {
   return booted;
 }
 
+// Reload after main announced a change. Most announcements echo our own
+// writes, already in the copy — those change nothing and redraw nothing.
+const signature = (list) => list.map((x) => `${x.id}:${x.updatedAt || 0}`).join(',');
 async function reload(kind) {
   try {
     const v = await window.muse.collections?.list(kind);
-    if (Array.isArray(v)) cache[kind] = v;
-  } catch (e) { console.warn('[collections] list', kind, e); }
+    if (!Array.isArray(v) || signature(v) === signature(cache[kind])) return;
+    cache[kind] = v;
+  } catch (e) { console.warn('[collections] list', kind, e); return; }
   emit(kind);
 }
 

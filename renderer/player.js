@@ -241,10 +241,13 @@ async function reloadCurrent({ autoplay }) {
 }
 
 async function resume() {
-  if (!store.get().player.track) return;
+  const track = store.get().player.track;
+  if (!track) return;
   // Play pressed again inside a pause's fade-out: cancel it and come back up.
   if (pauseTimer) { clearTimeout(pauseTimer); pauseTimer = null; rampTo(baseGain(), RESUME_FADE_S); return; }
-  if (urlStale()) { await reloadCurrent({ autoplay: true }); return; }
+  // Nothing loaded for this track yet (cued by a --paused launch): fetch it
+  // first — play() on an element with no source just waits, forever.
+  if (!audio.src || loadedTrackId !== track.id || urlStale()) { await reloadCurrent({ autoplay: true }); return; }
   try { await audio.play(); }
   catch (e) {
     // AbortError = a newer load interrupted us; anything else (network,
@@ -253,6 +256,20 @@ async function resume() {
     console.warn('[player] play() failed, reloading', e?.message || e);
     await reloadCurrent({ autoplay: true });
   }
+}
+
+// Put a queue in place without playing it — the track shows in the hero,
+// and play (resume) fetches its URL then. For a launch that should start
+// quiet (main.js --paused).
+export function cue(tracks, { startIdx = 0 } = {}) {
+  if (!Array.isArray(tracks) || !tracks.length) return;
+  const idx = Math.max(0, Math.min(startIdx, tracks.length - 1));
+  const track = tracks[idx];
+  singleLoop = false;
+  maybeScrobble();
+  resetScrobble(track);
+  store.set((s) => ({ ...s, player: { ...s.player, track, queue: tracks, queueIdx: idx, playing: false, currentTime: 0, duration: track.dt ? track.dt / 1000 : 0 } }));
+  pushPlayerState();
 }
 
 // Replace the queue and start playing. Used by radio modes on activation.
