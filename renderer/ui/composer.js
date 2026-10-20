@@ -23,6 +23,7 @@ let handlers = { refresh() {}, runSelected() {}, toggleLike() {}, openAsk() {}, 
 
 export const PLACEHOLDER = 'What would you like to hear?';
 const SCOPE_PLACEHOLDER = {
+  asks: 'Ask the DJ, or find an old conversation…',
   playlist: 'Filter, or paste a NetEase link…',
   accent: 'Pick one, or type a hex…',
 };

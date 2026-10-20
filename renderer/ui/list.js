@@ -422,6 +422,7 @@ function renderKeys() {
     ];
   }
   else if (e.submenu) keys = [['↵', 'Open'], ['⇥', 'Open'], ...back];
+  else if (e.kind === 'ask') keys = [['↵', 'Ask the DJ'], ...back];
   else if (e.kind === 'answer') {
     keys = e.count ? [['↵', 'Play all'], ['⌘↵', 'Next'], ['⇧↵', 'Queue'], ...(e.altRun ? [['⌥↵', 'Try again']] : [])] : [['↵', 'Try again']];
     if (e.suggestions?.length) keys.push(['⇥', 'An idea']);

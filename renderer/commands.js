@@ -23,6 +23,7 @@ import { api } from './api.js';
 import * as playlist from './playlist.js';
 import * as col from './lib/collections.js';
 import * as dj from './lib/dj.js';
+import { looksLikeAsk } from './lib/ask.js';
 import * as remote from './lib/remote.js';
 import { GLYPH } from './glyphs.js';
 import { THEMES, byId as themeById } from './themes.js';
@@ -462,7 +463,7 @@ const SCOPES = [
     id: 'asks', aliases: ['ask', 'dj', 'chats'], title: 'Asks', icon: 'spark', group: LISTEN,
     row() {
       const asks = col.list('asks');
-      if (!asks.length) return null;
+      if (!asks.length) return { desc: 'ask the DJ — your conversations land here' };
       const thinking = dj.pending().length;
       return thinking
         ? { desc: `${asks.length} so far`, value: 'Thinking…' }
@@ -839,15 +840,19 @@ function askRow(ask, group) {
   };
 }
 
+// /ask: your conversations — and whatever you type here can be a new one.
+// The "Ask the DJ" row leads when the text reads like a request (or matches
+// nothing you've asked before), and trails when it looks like a search.
 function buildAskEntries(filter) {
   const asks = col.list('asks');
-  if (!asks.length) return [note('Nothing asked yet', 'type what you’d like to hear, then ↵ on Ask Muse')];
   const f = (filter || '').trim();
   const rows = asks
     .filter((a) => matches(f, a.title, ...a.turns.map((t) => t.q)))
     .slice(0, LIST_CAP)
     .map((a) => askRow(a, memory.dayLabel(a.updatedAt)));
-  return rows.length ? rows : [note('No asks like that')];
+  if (!f) return rows.length ? rows : [note('Nothing asked yet', 'type a request here and ↵ — the DJ takes it from there')];
+  const ask = askEntry(f);
+  return looksLikeAsk(f) || !rows.length ? [ask, ...rows] : [...rows, ask];
 }
 
 // A Muse playlist as a row in /playlists.
