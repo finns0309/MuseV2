@@ -28,6 +28,26 @@ socket — see [muse ↔ echo](#muse--echo).
 > macOS (Apple Silicon), Electron. Built around my own liked-songs library;
 > it's a personal tool, not a polished NetEase client.
 
+## Showcase
+
+<img src="docs/screenshots/claude-01-home-light.png" alt="Home on the Claude theme, light" width="640">
+
+Home, on the default Claude theme.
+
+| Search | Ask the DJ | Commands |
+| --- | --- | --- |
+| <img src="docs/screenshots/claude-02-search-light.png" alt="Search with highlighted matches and key hints" width="250"><br>Highlighted matches, key hints along the bottom. | <img src="docs/screenshots/claude-03-ask-light.png" alt="Ask the DJ: a playlist card and follow-up chips" width="250"><br>A playlist card, and chips to nudge it. | <img src="docs/screenshots/claude-04-commands-menu-light.png" alt="The slash command menu" width="250"><br>`/` opens the menu. Each row shows its current value. |
+
+### Themes
+
+On **muse** the accent follows the cover. Claude, paper, and mono keep their own ink.
+
+| Muse, light | Muse, dark | Claude, dark | Paper | Mono |
+| --- | --- | --- | --- | --- |
+| <img src="docs/screenshots/muse-01-home-light-sparkle.png" alt="Muse theme, light, accent taken from the cover" width="148"> | <img src="docs/screenshots/muse-02-home-dark-brat.png" alt="Muse theme, dark, accent taken from the cover" width="148"> | <img src="docs/screenshots/claude-06-home-dark.png" alt="Claude theme, dark" width="148"> | <img src="docs/screenshots/paper-01-home-light.png" alt="Paper theme, light" width="148"> | <img src="docs/screenshots/mono-01-home-dark.png" alt="Mono theme, dark" width="148"> |
+
+The theme picker, the info card, and search and Ask on muse are in [`docs/screenshots`](docs/screenshots).
+
 ## Install
 
 **Download** — grab the latest `.dmg` from
