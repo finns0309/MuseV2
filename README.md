@@ -31,6 +31,11 @@ socket — see [muse ↔ echo](#muse--echo).
 ## Showcase
 
 <p align="center">
+  <a href="https://raw.githubusercontent.com/finns0309/MuseV2/main/docs/demo/musev2-demo.mp4"><img src="docs/demo/musev2-demo.gif" alt="Demo: ⌥Space summons the palette over a code editor, a search for tame, then esc" width="720"></a>
+</p>
+<p align="center"><sub>Summon. Switch. Gone.</sub></p>
+
+<p align="center">
   <a href="https://raw.githubusercontent.com/finns0309/MuseV2/main/docs/screenshots/claude-01-home-light.png"><img src="docs/screenshots/claude-01-home-light.png" alt="Home on the Claude theme, light" width="640"></a>
 </p>
 <p align="center"><sub>Home, on the default Claude theme.</sub></p>
@@ -79,7 +84,7 @@ Everything happens in the palette. Type to search; prefix with `/` for commands.
 | Input | Does |
 |-------|------|
 | `<query>` | search your library (and NetEase cloud at ≥2 chars). An **Ask Muse** row offers the query to the DJ — on top when it reads like a request |
-| `?<request>` | ask the DJ directly: *下雨天，安静点的* · *八月份我循环最多的那些* · *像这首但人声少一点*. It answers with a titled queue from your own listening; `↵` play all · `⌘↵` next · `⇧↵` queue · `⌥↵` try again |
+| `?<request>` | ask the DJ directly: *rainy day, something quiet* · *what I looped most in August* · *like this one, but fewer vocals*. It answers with a titled queue from your own listening; `↵` play all · `⌘↵` next · `⇧↵` queue · `⌥↵` try again |
 | `/` | the menu: **Listen** — Queue, Library, Playlists, Mode · **Look** — Appearance, Theme, Accent. Each shows its current value; `Enter` / `→` / `Tab` opens it as a chip in the input, `Backspace` at the start closes it |
 | `/<words>` | search every command at once, grouped by menu (`/da` → Daily, Dark; `/claude` → the theme) |
 | `/queue <q>` `/lib <q>` | filter the queue (Now playing · Up next · Played) or your library |
