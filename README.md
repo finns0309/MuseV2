@@ -52,6 +52,16 @@ socket — see [muse ↔ echo](#muse--echo).
 On **muse** the accent follows the cover. Claude, paper, and mono keep their own ink.
 
 <p align="center">
+  <a href="https://raw.githubusercontent.com/finns0309/MuseV2/main/docs/demo/musev2-accent.mp4"><img src="docs/demo/musev2-accent.gif" alt="Muse theme: the accent color follows each new cover" width="720"></a>
+</p>
+<p align="center"><sub>Your music sets the color.</sub></p>
+
+<p align="center">
+  <a href="https://raw.githubusercontent.com/finns0309/MuseV2/main/docs/demo/musev2-themes.mp4"><img src="docs/demo/musev2-themes.gif" alt="The same song across claude, paper, mono and muse, light and dark" width="720"></a>
+</p>
+<p align="center"><sub>Four themes. Light and dark.</sub></p>
+
+<p align="center">
   <a href="https://raw.githubusercontent.com/finns0309/MuseV2/main/docs/screenshots/muse-01-home-light-sparkle.png"><img src="docs/screenshots/muse-01-home-light-sparkle.png" alt="Muse theme, light, accent taken from the cover" width="18%"></a>
   <a href="https://raw.githubusercontent.com/finns0309/MuseV2/main/docs/screenshots/muse-02-home-dark-brat.png"><img src="docs/screenshots/muse-02-home-dark-brat.png" alt="Muse theme, dark, accent taken from the cover" width="18%"></a>
   <a href="https://raw.githubusercontent.com/finns0309/MuseV2/main/docs/screenshots/claude-06-home-dark.png"><img src="docs/screenshots/claude-06-home-dark.png" alt="Claude theme, dark" width="18%"></a>
@@ -113,6 +123,11 @@ Everything happens in the palette. Type to search; prefix with `/` for commands.
 | `⌘I` | the selected song's story beside the list — liked since, plays, first / last heard, the month you played it most (at home: opens the queue on what's playing) |
 | `Esc` | clear the input, then hide the window |
 
+<p align="center">
+  <a href="https://raw.githubusercontent.com/finns0309/MuseV2/main/docs/demo/musev2-keyboard.mp4"><img src="docs/demo/musev2-keyboard.gif" alt="Keyboard only: info card, add to queue, play next, play, then esc" width="720"></a>
+</p>
+<p align="center"><sub>No mouse. No context switch.</sub></p>
+
 ### Ask (the DJ)
 
 Ask sends one request to an OpenAI-compatible **Responses API** endpoint
@@ -133,6 +148,11 @@ carries a compact index of your library plus songs you've played lately, a
 per-month most-played timeline, and what's playing — one call, no tool loop,
 because each round trip on these endpoints costs 10–20s. Without `llm.json`
 the Ask row simply doesn't appear.
+
+<p align="center">
+  <a href="https://raw.githubusercontent.com/finns0309/MuseV2/main/docs/demo/musev2-agent.mp4"><img src="docs/demo/musev2-agent.gif" alt="A coding agent picks music through the ask_dj MCP tool; the palette is opened afterwards to confirm" width="720"></a>
+</p>
+<p align="center"><sub>Your agent can DJ too.</sub></p>
 
 ## How it works
 
