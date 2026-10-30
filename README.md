@@ -89,9 +89,10 @@ surface: buttons, progress bar, cursor.
 
 ## Ask the DJ
 
-Not sure what you want? Type `?` and say it in words: *rainy day, something quiet* ·
+Not sure what you want? Type `/ask`, then say it in words: *rainy day, something quiet* ·
 *what I looped most in August* · *like this one, but fewer vocals*. The DJ answers
-with a titled queue built from your own listening, and chips to nudge it.
+with a titled queue built from your own listening, and chips to nudge it. `/ask` also
+keeps your past conversations, so you can pick one up again.
 
 <details>
 <summary>Setting up the DJ</summary>
@@ -169,7 +170,7 @@ Type to search; prefix with `/` for commands.
 | Input | Does |
 |-------|------|
 | `<query>` | search your library (and NetEase cloud at ≥2 chars). An **Ask Muse** row offers the query to the DJ — on top when it reads like a request |
-| `?<request>` | ask the DJ directly: *rainy day, something quiet* · *what I looped most in August* · *like this one, but fewer vocals*. It answers with a titled queue from your own listening; `↵` play all · `⌘↵` next · `⇧↵` queue · `⌥↵` try again |
+| `/ask <request>` | ask the DJ, or reopen a past conversation: *rainy day, something quiet* · *what I looped most in August* · *like this one, but fewer vocals*. It answers with a titled queue from your own listening; `↵` play all · `⌘↵` next · `⇧↵` queue · `⌥↵` try again |
 | `/` | the menu: **Listen** — Queue, Library, Playlists, Mode · **Look** — Appearance, Theme, Accent. Each shows its current value; `Enter` / `→` / `Tab` opens it as a chip in the input, `Backspace` at the start closes it |
 | `/<words>` | search every command at once, grouped by menu (`/da` → Daily, Dark; `/claude` → the theme) |
 | `/queue <q>` `/lib <q>` | filter the queue (Now playing · Up next · Played) or your library |
